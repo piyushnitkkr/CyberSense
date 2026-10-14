@@ -197,4 +197,4 @@ async def delete_session(session_id: str, db: AsyncSession = Depends(get_session
 async def submit_feedback(req: FeedbackRequest, db: AsyncSession = Depends(get_session)):
     db.add(Feedback(message_id=req.message_id, rating=req.rating, comment=req.comment))
     await db.commit()
-    return {"status": "recorded"}
+    return {"status": "ok"}

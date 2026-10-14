@@ -73,6 +73,7 @@ class KEVLoader(BaseLoader):
                 "due_date": entry.get("dueDate"),
                 "vendor": entry.get("vendorProject"),
                 "product": entry.get("product"),
+                "ransomware_campaign": entry.get("knownRansomwareCampaignUse"),
             },
             content_hash=content_hash,
         )

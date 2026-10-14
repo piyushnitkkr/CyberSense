@@ -71,14 +71,19 @@ class QueryPipeline:
         t0 = time.perf_counter()
         entity_ids = extract_ids(rewritten)
         entity_chunks: list[RetrievedChunk] = []
-        if entity_ids:
+        if entity_ids and hasattr(self.vector_store, "get_by_ids_filter"):
             entity_chunks = await self.vector_store.get_by_ids_filter(entity_ids, limit=20)
         timings["entity_ms"] = (time.perf_counter() - t0) * 1000
 
         # 3. Dense retrieval
         t0 = time.perf_counter()
         filter_dict = self._build_filter_dict(filters)
-        query_vec = self.embedder.encode_query(rewritten)
+        if hasattr(self.embedder, "encode_query"):
+            query_vec = self.embedder.encode_query(rewritten)
+        elif hasattr(self.embedder, "embed_query"):
+            query_vec = self.embedder.embed_query(rewritten)
+        else:
+            query_vec = self.embedder.encode([rewritten])[0]
         dense_chunks = await self.vector_store.search(
             query_vec, limit=self.cfg.k_dense, filters=filter_dict
         )

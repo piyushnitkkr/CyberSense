@@ -70,8 +70,36 @@ class CWELoader(BaseLoader):
             return ""
         return "".join(child.itertext()).strip()
 
-    def _to_document(self, w: ET.Element) -> Document:
-        cwe_id = f"CWE-{w.get('ID', '')}"
+    def _to_document(self, w: ET.Element | dict) -> Document:
+        if isinstance(w, dict):
+            raw_id = str(w.get("@ID") or w.get("ID", ""))
+            cwe_id = f"CWE-{raw_id}" if not raw_id.startswith("CWE-") else raw_id
+            name = w.get("@Name") or w.get("Name", "")
+            title = f"{cwe_id}: {name}" if name else cwe_id
+            description = w.get("Description", "")
+            likelihood = w.get("Likelihood_Of_Exploit", "")
+            text = (
+                f"{title}\n"
+                f"Likelihood: {likelihood}\n\n"
+                f"Description:\n{description}"
+            )
+            content_hash = hashlib.sha256(text.encode()).hexdigest()
+            return Document(
+                doc_id=f"cwe:{cwe_id}",
+                source="cwe",
+                title=title,
+                url=f"https://cwe.mitre.org/data/definitions/{raw_id}.html",
+                doc_type=DocType.weakness,
+                text=text,
+                metadata={
+                    "cwe_id": cwe_id,
+                    "likelihood": likelihood,
+                },
+                content_hash=content_hash,
+            )
+
+        raw_id = w.get("ID", "")
+        cwe_id = f"CWE-{raw_id}"
         name = w.get("Name", "")
         title = f"{cwe_id}: {name}"
 
@@ -116,7 +144,7 @@ class CWELoader(BaseLoader):
             doc_id=f"cwe:{cwe_id}",
             source="cwe",
             title=title,
-            url=f"https://cwe.mitre.org/data/definitions/{w.get('ID')}.html",
+            url=f"https://cwe.mitre.org/data/definitions/{raw_id}.html",
             doc_type=DocType.weakness,
             text=text,
             metadata={

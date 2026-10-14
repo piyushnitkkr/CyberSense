@@ -25,7 +25,12 @@ class VectorStore:
     @property
     def client(self) -> AsyncQdrantClient:
         if self._client is None:
-            self._client = AsyncQdrantClient(url=self.url)
+            if self.url.startswith("http://") or self.url.startswith("https://"):
+                self._client = AsyncQdrantClient(url=self.url)
+            elif self.url == ":memory:":
+                self._client = AsyncQdrantClient(location=":memory:")
+            else:
+                self._client = AsyncQdrantClient(path=self.url)
         return self._client
 
     async def ensure_collection(self) -> None:
@@ -62,7 +67,7 @@ class VectorStore:
             PointStruct(
                 id=self._chunk_uuid(chunk.chunk_id),
                 vector=vec,
-                payload=chunk.metadata.model_dump(),
+                payload={**chunk.metadata.model_dump(), "text": chunk.text, "chunk_id": chunk.chunk_id},
             )
             for chunk, vec in zip(chunks, vectors)
         ]
@@ -79,19 +84,30 @@ class VectorStore:
     ) -> list[RetrievedChunk]:
         """Dense vector search; returns RetrievedChunk list."""
         qdrant_filter = self._build_filter(filters) if filters else None
-        results = await self.client.search(
-            collection_name=self.collection,
-            query_vector=query_vector,
-            limit=limit,
-            query_filter=qdrant_filter,
-            with_payload=True,
-        )
+        if hasattr(self.client, "search"):
+            results = await self.client.search(
+                collection_name=self.collection,
+                query_vector=query_vector,
+                limit=limit,
+                query_filter=qdrant_filter,
+                with_payload=True,
+            )
+        else:
+            resp = await self.client.query_points(
+                collection_name=self.collection,
+                query=query_vector,
+                limit=limit,
+                query_filter=qdrant_filter,
+                with_payload=True,
+            )
+            results = resp.points
+
         return [
             RetrievedChunk(
-                chunk_id=r.payload.get("doc_id", "") + ":" + str(r.id),
+                chunk_id=r.payload.get("chunk_id", r.payload.get("doc_id", "") + ":" + str(r.id)),
                 text=r.payload.get("text", ""),
                 score=r.score,
-                metadata=ChunkMetadata(**{k: v for k, v in r.payload.items() if k != "text"}),
+                metadata=ChunkMetadata(**{k: v for k, v in r.payload.items() if k not in ("text", "chunk_id")}),
             )
             for r in results
         ]
@@ -116,10 +132,10 @@ class VectorStore:
         chunks, _ = results
         return [
             RetrievedChunk(
-                chunk_id=str(c.id),
+                chunk_id=c.payload.get("chunk_id", str(c.id)),
                 text=c.payload.get("text", ""),
                 score=1.0,  # exact match
-                metadata=ChunkMetadata(**{k: v for k, v in c.payload.items() if k != "text"}),
+                metadata=ChunkMetadata(**{k: v for k, v in c.payload.items() if k not in ("text", "chunk_id")}),
             )
             for c in chunks
         ]

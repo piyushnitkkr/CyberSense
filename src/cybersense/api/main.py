@@ -27,6 +27,14 @@ async def lifespan(app: FastAPI):
     setup_logging(level=settings.log_level)
     logger.info("CyberSense API starting up")
     await init_db()
+    try:
+        from cybersense.api.deps import get_bm25, get_vector_store
+        from cybersense.api.routes_admin import rebuild_bm25_index
+        vs = get_vector_store(settings)
+        bm25 = get_bm25()
+        await rebuild_bm25_index(vs, bm25)
+    except Exception as exc:
+        logger.warning("Could not pre-populate BM25 index on startup", extra={"error": str(exc)})
     yield
     logger.info("CyberSense API shutting down")
 
@@ -67,7 +75,12 @@ async def health() -> dict:
 
     try:
         from qdrant_client import AsyncQdrantClient
-        client = AsyncQdrantClient(url=settings.qdrant_url)
+        if settings.qdrant_url.startswith("http://") or settings.qdrant_url.startswith("https://"):
+            client = AsyncQdrantClient(url=settings.qdrant_url)
+        elif settings.qdrant_url == ":memory:":
+            client = AsyncQdrantClient(location=":memory:")
+        else:
+            client = AsyncQdrantClient(path=settings.qdrant_url)
         await client.get_collections()
         checks["qdrant"] = "ok"
     except Exception as exc:

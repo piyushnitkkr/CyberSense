@@ -17,6 +17,35 @@ st.set_page_config(
     layout="wide",
 )
 
+
+# ── Helper functions (must be defined before use) ─────────────────────────────
+
+def _render_citations(citations: list[dict]) -> None:
+    if not citations:
+        return
+    st.markdown("**Sources:**")
+    for c in citations:
+        with st.expander(f"[{c['n']}] {c['title']} — {c['source'].upper()}", expanded=False):
+            if c.get("section_path"):
+                st.caption(f"📂 {c['section_path']}")
+            if c.get("url"):
+                st.markdown(f"🔗 [{c['url']}]({c['url']})")
+            if c.get("snippet"):
+                st.text(c["snippet"])
+
+
+def _send_feedback(message_id: str, rating: str) -> bool:
+    try:
+        resp = requests.post(
+            f"{API_BASE}/api/v1/feedback",
+            json={"message_id": message_id, "rating": rating},
+            timeout=10,
+        )
+        return resp.ok
+    except Exception:
+        return False
+
+
 # ── Session state ─────────────────────────────────────────────────────────────
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
@@ -46,7 +75,7 @@ with st.sidebar:
         "Upload PDF / DOCX / MD / TXT / HTML",
         type=["pdf", "docx", "md", "txt", "html"],
     )
-    if uploaded and st.button("Ingest document"):
+    if uploaded and st.button("Ingest document", key="btn_ingest"):
         with st.spinner("Ingesting…"):
             resp = requests.post(
                 f"{API_BASE}/api/v1/documents",
@@ -58,9 +87,10 @@ with st.sidebar:
                 st.error(f"❌ {resp.text}")
 
     st.divider()
-    if st.button("🗑️ Clear chat"):
+    if st.button("🗑️ Clear chat", key="btn_clear"):
         st.session_state.messages = []
         st.session_state.session_id = str(uuid.uuid4())
+        st.session_state.last_debug = {}
         st.rerun()
 
 # ── Main chat area ────────────────────────────────────────────────────────────
@@ -68,11 +98,24 @@ st.title("🛡️ CyberSense")
 st.caption("Cybersecurity RAG Chatbot — answers grounded in indexed sources with citations.")
 
 # Render history
-for msg in st.session_state.messages:
+for idx, msg in enumerate(st.session_state.messages):
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
-        if msg["role"] == "assistant" and msg.get("citations"):
-            _render_citations(msg["citations"])
+        if msg["role"] == "assistant":
+            if msg.get("citations"):
+                _render_citations(msg["citations"])
+            # Thumbs feedback
+            msg_id = msg.get("message_id", "")
+            if msg_id:
+                col1, col2, _ = st.columns([1, 1, 8])
+                with col1:
+                    if st.button("👍", key=f"up_{idx}"):
+                        _send_feedback(msg_id, "up")
+                        st.toast("Thanks for your feedback!")
+                with col2:
+                    if st.button("👎", key=f"dn_{idx}"):
+                        _send_feedback(msg_id, "down")
+                        st.toast("Thanks for your feedback!")
 
 # Input
 if prompt := st.chat_input("Ask a cybersecurity question…"):
@@ -85,6 +128,7 @@ if prompt := st.chat_input("Ask a cybersecurity question…"):
         full_answer = ""
         citations = []
         debug_info = {}
+        message_id = ""
 
         try:
             payload = {
@@ -103,6 +147,7 @@ if prompt := st.chat_input("Ask a cybersecurity question…"):
                 data = resp.json()
                 full_answer = data.get("answer", "")
                 citations = data.get("citations", [])
+                message_id = data.get("message_id", "")
                 debug_info = {
                     "rewritten_query": data.get("rewritten_query"),
                     "latency_ms": data.get("latency_ms", {}),
@@ -110,7 +155,10 @@ if prompt := st.chat_input("Ask a cybersecurity question…"):
                 placeholder.markdown(full_answer)
                 _render_citations(citations)
             else:
-                err = resp.json().get("detail", resp.text)
+                try:
+                    err = resp.json().get("detail", resp.text)
+                except Exception:
+                    err = resp.text
                 placeholder.error(f"❌ {err}")
                 full_answer = f"Error: {err}"
 
@@ -122,6 +170,7 @@ if prompt := st.chat_input("Ask a cybersecurity question…"):
             "role": "assistant",
             "content": full_answer,
             "citations": citations,
+            "message_id": message_id,
         })
         st.session_state.last_debug = debug_info
 
@@ -137,17 +186,3 @@ st.caption(
     "Always verify critical security decisions with primary sources. "
     "CyberSense may make mistakes."
 )
-
-
-def _render_citations(citations: list[dict]) -> None:
-    if not citations:
-        return
-    st.markdown("**Sources:**")
-    for c in citations:
-        with st.expander(f"[{c['n']}] {c['title']} — {c['source'].upper()}", expanded=False):
-            if c.get("section_path"):
-                st.caption(f"📂 {c['section_path']}")
-            if c.get("url"):
-                st.markdown(f"🔗 [{c['url']}]({c['url']})")
-            if c.get("snippet"):
-                st.text(c["snippet"])

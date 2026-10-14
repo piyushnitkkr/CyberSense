@@ -13,4 +13,11 @@ build/
 *.egg-info/
 .venv/
 venv/
+.pip_cache/
+.hf_cache/
+.torch_cache/
+data/qdrant_db/
+data/*.db
 eval/reports/
+.coverage
+coverage.xml

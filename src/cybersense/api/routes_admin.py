@@ -20,4 +20,50 @@ async def stats(db: AsyncSession = Depends(get_session)):
         .group_by(DocumentRecord.source)
     )
     counts = {row.source: row.count for row in result}
-    return {"document_counts_by_source": counts}
+    total = sum(counts.values())
+    return {
+        "counts_by_source": counts,
+        "document_counts_by_source": counts,
+        "total_documents": total,
+    }
+
+
+@router.post("/admin/rebuild-index", dependencies=[Depends(verify_api_key)])
+async def rebuild_bm25_index(
+    vector_store=Depends(get_vector_store),
+    bm25=Depends(get_bm25),
+):
+    """Rebuild the in-memory BM25 index from all chunks currently in Qdrant."""
+    from cybersense.models import ChunkMetadata
+
+    texts: list[str] = []
+    chunk_ids: list[str] = []
+    metadatas: list[ChunkMetadata] = []
+    offset = None
+
+    while True:
+        try:
+            results, next_offset = await vector_store.client.scroll(
+                collection_name=vector_store.collection,
+                limit=500,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+        except Exception:
+            break
+
+        for point in results:
+            payload = point.payload or {}
+            text = payload.get("text", "")
+            texts.append(text)
+            chunk_ids.append(str(point.id))
+            meta_dict = {k: v for k, v in payload.items() if k != "text"}
+            metadatas.append(ChunkMetadata(**meta_dict))
+
+        if next_offset is None or not results:
+            break
+        offset = next_offset
+
+    bm25.build(texts, chunk_ids, metadatas)
+    return {"status": "ok", "indexed_chunks": len(texts)}

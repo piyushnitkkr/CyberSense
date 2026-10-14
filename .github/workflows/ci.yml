@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, develop]
   pull_request:
     branches: [main, master]
 
@@ -32,6 +32,45 @@ jobs:
         run: |
           ruff check src/ tests/ scripts/
 
-      - name: Run Pytest Test Suite
+      - name: Check formatting (Black)
         run: |
-          pytest tests/ -v --tb=short
+          black --check src/ tests/ scripts/
+
+      - name: Run Pytest with Coverage
+        env:
+          APP_ENV: test
+          ANTHROPIC_API_KEY: ""
+          LLM_PROVIDER: fake
+        run: |
+          pytest tests/ -v --tb=short --cov=src/cybersense --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  safety-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run Safety Tests (guardrails + injection fixtures)
+        env:
+          APP_ENV: test
+          LLM_PROVIDER: fake
+        run: |
+          pytest tests/test_guardrails.py -v --tb=short

@@ -60,9 +60,15 @@ async def api_client() -> AsyncIterator[AsyncClient]:
         async def get_by_id(self, *args, **kwargs):
             return None
 
+        async def get_by_ids_filter(self, *args, **kwargs) -> list[RetrievedChunk]:
+            return await self.search()
+
     class MockEmbedder:
         def embed_query(self, text: str) -> list[float]:
             return [0.1] * 384
+
+        def encode_query(self, text: str) -> list[float]:
+            return self.embed_query(text)
 
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_llm] = lambda: fake_llm

@@ -40,6 +40,7 @@ class RetrievalConfig(BaseSettings):
     k_dense: int = 30
     k_sparse: int = 30
     k_fused: int = 30
+    top_k_retrieve: int = 30
     top_k_final: int = 8
     relevance_threshold: float = 0.3
     max_chunks_per_doc: int = 3
@@ -81,8 +82,12 @@ class Settings(BaseSettings):
         env_file=str(_ROOT / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="ignore",
+        extra="allow",
     )
+
+    app_name: str = Field(default="CyberSense", alias="APP_NAME")
+    app_env: str = Field(default="development", alias="APP_ENV")
+    database_url: str = Field(default="sqlite+aiosqlite:///data/cybersense.db", alias="DATABASE_URL")
 
     # Secrets (from .env only)
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")

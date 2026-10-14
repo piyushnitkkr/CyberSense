@@ -35,7 +35,7 @@ async def upload_document(
     """Upload a PDF/DOCX/MD/TXT/HTML file and ingest it."""
     filename = file.filename or "upload"
     if not validate_upload_filename(filename, settings.api.allowed_extensions):
-        raise HTTPException(status_code=400, detail=f"File type not allowed. Permitted: {settings.api.allowed_extensions}")
+        raise HTTPException(status_code=400, detail=f"Disallowed file extension. Permitted: {settings.api.allowed_extensions}")
 
     content = await file.read()
     if len(content) > settings.api.upload_max_mb * 1024 * 1024:

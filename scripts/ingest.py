@@ -50,6 +50,9 @@ async def run(source: str, since: str | None, limit: int | None) -> None:
             try:
                 loader = get_loader_for_source(src, settings)
                 docs = loader.load(since=since, limit=limit)
+                if limit:
+                    import itertools
+                    docs = itertools.islice(docs, limit)
                 pipeline = IngestionPipeline(session, vector_store, embedder, settings)
                 run_record = await pipeline.run(src, docs)
                 print(

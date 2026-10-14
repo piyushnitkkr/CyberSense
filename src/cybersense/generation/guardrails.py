@@ -21,7 +21,7 @@ _REFUSAL_MESSAGE = (
 # ── Prompt injection patterns ─────────────────────────────────────────────────
 _INJECTION_PATTERNS = [
     re.compile(r"ignore (previous|above|prior|all) instructions?", re.IGNORECASE),
-    re.compile(r"disregard (your|the) (system|previous) (prompt|instructions?)", re.IGNORECASE),
+    re.compile(r"disregard (?:(?:your|the)\s+)?(?:system|previous) (?:prompt|instructions?)", re.IGNORECASE),
     re.compile(r"you are now\b.{0,40}\bassistant", re.IGNORECASE),
     re.compile(r"<\|?(system|user|assistant)\|?>", re.IGNORECASE),
 ]
