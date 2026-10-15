@@ -1,6 +1,6 @@
-data/raw/
-data/processed/
-db/
+/data/raw/
+/data/processed/
+/db/
 .env
 __pycache__/
 *.pyc
