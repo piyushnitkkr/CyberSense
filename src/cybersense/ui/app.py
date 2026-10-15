@@ -9,7 +9,16 @@ import uuid
 import requests
 import streamlit as st
 
-API_BASE = os.getenv("API_BASE_URL", "http://localhost:8000")
+def _get_default_api_base() -> str:
+    env_val = os.getenv("API_BASE_URL", "")
+    if env_val:
+        return env_val.rstrip("/")
+    try:
+        if hasattr(st, "secrets") and "API_BASE_URL" in st.secrets:
+            return str(st.secrets["API_BASE_URL"]).rstrip("/")
+    except Exception:
+        pass
+    return "http://localhost:8000"
 
 st.set_page_config(
     page_title="CyberSense — Cybersecurity RAG Chatbot",
@@ -34,10 +43,11 @@ def _render_citations(citations: list[dict]) -> None:
                 st.text(c["snippet"])
 
 
-def _send_feedback(message_id: str, rating: str) -> bool:
+def _send_feedback(message_id: str, rating: str, api_base: str = "") -> bool:
     try:
+        base = api_base or API_BASE
         resp = requests.post(
-            f"{API_BASE}/api/v1/feedback",
+            f"{base}/api/v1/feedback",
             json={"message_id": message_id, "rating": rating},
             timeout=10,
         )
@@ -53,10 +63,32 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "last_debug" not in st.session_state:
     st.session_state.last_debug = {}
+if "api_base" not in st.session_state:
+    st.session_state.api_base = _get_default_api_base()
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.title("⚙️ Settings")
+
+    with st.expander("🌐 Backend Connection", expanded=False):
+        api_input = st.text_input(
+            "Backend API URL",
+            value=st.session_state.api_base,
+            help="URL of the CyberSense FastAPI backend (e.g. https://cybersense-api.onrender.com)",
+        )
+        st.session_state.api_base = api_input.rstrip("/")
+        if st.button("Test Connection", key="btn_test_conn"):
+            try:
+                r = requests.get(f"{st.session_state.api_base}/health", timeout=5)
+                if r.ok:
+                    data = r.json()
+                    st.success(f"Connected! (v{data.get('version', '1.0.0')})")
+                else:
+                    st.warning(f"Returned status {r.status_code}")
+            except Exception as e:
+                st.error(f"Cannot connect: {e}")
+
+API_BASE = st.session_state.api_base
 
     st.subheader("Source Filters")
     sources = st.multiselect(

@@ -120,6 +120,51 @@ streamlit run src/cybersense/ui/app.py
 
 ---
 
+## 4. Free Public Cloud Deployment
+
+You can host CyberSense with a public URL completely **free of cost** using this stack:
+
+| Component | Platform | Free Tier |
+|---|---|---|
+| **FastAPI Backend** | [Render.com](https://render.com) | Free Web Service (750 hrs/month) |
+| **Streamlit Web UI** | [Streamlit Community Cloud](https://streamlit.io/cloud) | 100% Free, unlimited public apps |
+| **Vector Database** | [Qdrant Cloud](https://cloud.qdrant.io) | Free 1GB forever cluster (no credit card required) |
+| **LLM Inference** | [Groq Cloud](https://console.groq.com) | Free Tier (30 req/min for Llama 3.1 8B) |
+
+### Step-by-Step Deployment:
+
+#### 1. Setup Free Qdrant Cloud Vector Database
+1. Sign up at [cloud.qdrant.io](https://cloud.qdrant.io) and create a **Free Tier cluster**.
+2. Copy your **Cluster URL** (e.g. `https://xxxxxx.us-east4-0.gcp.cloud.qdrant.io:6333`) and generate an **API Key**.
+3. Migrate your local indexed vectors to Qdrant Cloud:
+   ```bash
+   set QDRANT_CLOUD_URL=https://YOUR-CLUSTER-URL:6333
+   set QDRANT_CLOUD_KEY=your-qdrant-api-key
+   python scripts/upload_to_qdrant_cloud.py
+   ```
+
+#### 2. Deploy FastAPI Backend on Render.com
+1. Fork or push this repository to your GitHub account.
+2. Sign in to [Render.com](https://render.com) with GitHub.
+3. Click **New +** > **Blueprint**, connect your CyberSense repo, and select `render.yaml`.
+4. Render will prompt you for 3 environment variables:
+   - `GROQ_API_KEY`: Your Groq API key from [console.groq.com](https://console.groq.com)
+   - `QDRANT_URL`: Your Qdrant Cloud cluster URL
+   - `QDRANT_API_KEY`: Your Qdrant Cloud API key
+5. Click **Apply**. Once deployed, Render gives you a public URL (e.g. `https://cybersense-api.onrender.com`).
+
+#### 3. Deploy Streamlit Web UI on Streamlit Community Cloud
+1. Sign in to [share.streamlit.io](https://share.streamlit.io/) with GitHub.
+2. Click **New app**.
+3. Select your repository: `username/CyberSense`, branch: `main`, main file path: `streamlit_app.py`.
+4. In **Advanced settings** > **Secrets**, enter:
+   ```toml
+   API_BASE_URL = "https://your-render-app.onrender.com"
+   ```
+5. Click **Deploy!** Your chatbot is now live for the public.
+
+---
+
 ## Configuration Reference
 
 Key configuration options in `config.yaml` or overridden via environment variables:

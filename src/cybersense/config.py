@@ -95,6 +95,7 @@ class Settings(BaseSettings):
     nvd_api_key: str = Field(default="", alias="NVD_API_KEY")
     api_key: str = Field(default="", alias="API_KEY")
     qdrant_url: str = Field(default="http://localhost:6333", alias="QDRANT_URL")
+    qdrant_api_key: str = Field(default="", alias="QDRANT_API_KEY")
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     debug: bool = Field(default=False, alias="DEBUG")

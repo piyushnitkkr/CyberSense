@@ -76,7 +76,10 @@ async def health() -> dict:
     try:
         from qdrant_client import AsyncQdrantClient
         if settings.qdrant_url.startswith("http://") or settings.qdrant_url.startswith("https://"):
-            client = AsyncQdrantClient(url=settings.qdrant_url)
+            client = AsyncQdrantClient(
+                url=settings.qdrant_url,
+                api_key=settings.qdrant_api_key or None,
+            )
         elif settings.qdrant_url == ":memory:":
             client = AsyncQdrantClient(location=":memory:")
         else:

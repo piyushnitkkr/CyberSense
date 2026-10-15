@@ -22,8 +22,8 @@ def _get_embedder(model: str, device: str, batch_size: int) -> EmbeddingModel:
 
 
 @functools.lru_cache(maxsize=1)
-def _get_vector_store(url: str, collection: str, dimension: int) -> VectorStore:
-    return VectorStore(url=url, collection=collection, dimension=dimension)
+def _get_vector_store(url: str, collection: str, dimension: int, api_key: str = "") -> VectorStore:
+    return VectorStore(url=url, collection=collection, dimension=dimension, api_key=api_key)
 
 
 @functools.lru_cache(maxsize=1)
@@ -51,7 +51,12 @@ def get_embedder(settings: Settings = Depends(get_settings)) -> EmbeddingModel:
 
 
 def get_vector_store(settings: Settings = Depends(get_settings)) -> VectorStore:
-    return _get_vector_store(settings.qdrant_url, settings.qdrant.collection, settings.embedding.dimension)
+    return _get_vector_store(
+        settings.qdrant_url,
+        settings.qdrant.collection,
+        settings.embedding.dimension,
+        settings.qdrant_api_key,
+    )
 
 
 def get_reranker(settings: Settings = Depends(get_settings)) -> Reranker | None:

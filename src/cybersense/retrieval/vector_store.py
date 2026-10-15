@@ -16,17 +16,21 @@ logger = get_logger(__name__)
 class VectorStore:
     """Async wrapper around Qdrant for upsert and dense search."""
 
-    def __init__(self, url: str, collection: str, dimension: int) -> None:
+    def __init__(self, url: str, collection: str, dimension: int, api_key: str = "") -> None:
         self.url = url
         self.collection = collection
         self.dimension = dimension
+        self._api_key = api_key
         self._client: AsyncQdrantClient | None = None
 
     @property
     def client(self) -> AsyncQdrantClient:
         if self._client is None:
             if self.url.startswith("http://") or self.url.startswith("https://"):
-                self._client = AsyncQdrantClient(url=self.url)
+                self._client = AsyncQdrantClient(
+                    url=self.url,
+                    api_key=self._api_key or None,
+                )
             elif self.url == ":memory:":
                 self._client = AsyncQdrantClient(location=":memory:")
             else:
