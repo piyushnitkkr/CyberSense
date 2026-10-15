@@ -22,10 +22,18 @@ class LLMClient(ABC):
 
 # ── Groq ──────────────────────────────────────────────────────────────────────
 
-class GroqClient(LLMClient):
-    """Groq Cloud LLM client — free tier, ultra-fast inference."""
+_GROQ_FALLBACK_MODELS = [
+    "qwen/qwen3.8-27b",
+    "openai/gpt-oss-20b",
+    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+]
 
-    def __init__(self, api_key: str = "", model: str = "llama-3.1-8b-instant") -> None:
+
+class GroqClient(LLMClient):
+    """Groq Cloud LLM client — free tier, ultra-fast inference with automatic model fallback."""
+
+    def __init__(self, api_key: str = "", model: str = "qwen/qwen3.8-27b") -> None:
         import os
         key = api_key or os.environ.get("GROQ_API_KEY", "")
         if not key:
@@ -37,18 +45,36 @@ class GroqClient(LLMClient):
         self._client = AsyncGroq(api_key=key)
         self.model = model
 
+    async def _try_create(self, messages: list[dict], max_tokens: int, temperature: float, stream: bool = False):
+        models_to_try = [self.model] + [m for m in _GROQ_FALLBACK_MODELS if m != self.model]
+        last_exc: Exception | None = None
+        for m in models_to_try:
+            try:
+                res = await self._client.chat.completions.create(
+                    model=m,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    stream=stream,
+                )
+                self.model = m
+                return res
+            except Exception as e:
+                err_str = str(e).lower()
+                if "model_not_found" in err_str or "does not exist" in err_str or "access" in err_str:
+                    last_exc = e
+                    continue
+                raise
+        if last_exc:
+            raise last_exc
+
     async def generate(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> str:
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        response = await self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
+        response = await self._try_create(messages, max_tokens=max_tokens, temperature=temperature, stream=False)
         return response.choices[0].message.content or ""
 
     async def stream(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> AsyncIterator[str]:
@@ -57,13 +83,7 @@ class GroqClient(LLMClient):
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        stream = await self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            stream=True,
-        )
+        stream = await self._try_create(messages, max_tokens=max_tokens, temperature=temperature, stream=True)
         async for chunk in stream:
             token = chunk.choices[0].delta.content
             if token:
