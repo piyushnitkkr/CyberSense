@@ -27,9 +27,14 @@ class VectorStore:
     def client(self) -> AsyncQdrantClient:
         if self._client is None:
             if self.url.startswith("http://") or self.url.startswith("https://"):
+                url = self.url
+                if "cloud.qdrant.io" in url:
+                    import re
+                    url = re.sub(r":6333/?$", "", url)
                 self._client = AsyncQdrantClient(
-                    url=self.url,
+                    url=url,
                     api_key=self._api_key or None,
+                    prefer_grpc=False,
                 )
             elif self.url == ":memory:":
                 self._client = AsyncQdrantClient(location=":memory:")

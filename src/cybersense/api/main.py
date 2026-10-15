@@ -89,15 +89,21 @@ async def health() -> dict:
     try:
         from qdrant_client import AsyncQdrantClient
         if settings.qdrant_url.startswith("http://") or settings.qdrant_url.startswith("https://"):
+            import re
+            url = settings.qdrant_url
+            if "cloud.qdrant.io" in url:
+                url = re.sub(r":6333/?$", "", url)
             client = AsyncQdrantClient(
-                url=settings.qdrant_url,
+                url=url,
                 api_key=settings.qdrant_api_key or None,
+                prefer_grpc=False,
             )
         elif settings.qdrant_url == ":memory:":
             client = AsyncQdrantClient(location=":memory:")
         else:
             client = AsyncQdrantClient(path=settings.qdrant_url)
         await client.get_collections()
+        await client.close()
         checks["qdrant"] = "ok"
     except Exception as exc:
         checks["qdrant"] = f"error: {exc}"
