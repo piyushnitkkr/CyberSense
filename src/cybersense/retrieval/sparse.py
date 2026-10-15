@@ -35,7 +35,15 @@ class BM25Index:
         self._corpus = texts
         self._chunk_ids = chunk_ids
         self._metadatas = metadatas
+        if not texts:
+            self._bm25 = None
+            logger.info("BM25: corpus is empty, awaiting document ingestion")
+            return
         tokenized = [_tokenize(t) for t in texts]
+        if not any(tokenized):
+            self._bm25 = None
+            logger.info("BM25: corpus contains no searchable tokens, awaiting valid document ingestion")
+            return
         self._bm25 = BM25Okapi(tokenized)
         logger.info("BM25: built index", extra={"corpus_size": len(texts)})
 

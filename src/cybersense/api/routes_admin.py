@@ -55,7 +55,7 @@ async def rebuild_bm25_index(
 
         for point in results:
             payload = point.payload or {}
-            text = payload.get("text", "")
+            text = payload.get("text") or payload.get("title", "")
             texts.append(text)
             chunk_ids.append(str(point.id))
             meta_dict = {k: v for k, v in payload.items() if k != "text"}
