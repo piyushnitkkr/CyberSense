@@ -67,6 +67,19 @@ app.include_router(ingest_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 
 
+@app.get("/", tags=["root"])
+async def root() -> dict:
+    """Root info endpoint."""
+    return {
+        "service": "CyberSense API",
+        "status": "online",
+        "docs": "/docs",
+        "health": "/health",
+        "version": "0.1.0",
+        "description": "Cybersecurity RAG Chatbot API with grounded inline citations",
+    }
+
+
 @app.get("/health", tags=["health"])
 async def health() -> dict:
     """Liveness + dependency check."""
