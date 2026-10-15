@@ -43,7 +43,7 @@ class VectorStore:
         return self._client
 
     async def ensure_collection(self) -> None:
-        """Create collection if it doesn't already exist."""
+        """Create collection if it doesn't already exist and ensure payload indexes."""
         existing = [c.name for c in (await self.client.get_collections()).collections]
         if self.collection not in existing:
             await self.client.create_collection(
@@ -51,6 +51,16 @@ class VectorStore:
                 vectors_config=VectorParams(size=self.dimension, distance=Distance.COSINE),
             )
             logger.info("Created Qdrant collection", extra={"collection": self.collection})
+
+        for field in ["ids", "source", "doc_id"]:
+            try:
+                await self.client.create_payload_index(
+                    collection_name=self.collection,
+                    field_name=field,
+                    field_schema=models.PayloadSchemaType.KEYWORD,
+                )
+            except Exception:
+                pass
 
     async def upsert_chunks(
         self,
