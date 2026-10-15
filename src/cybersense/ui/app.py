@@ -88,7 +88,7 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"Cannot connect: {e}")
 
-API_BASE = st.session_state.api_base
+    API_BASE = st.session_state.api_base
 
     st.subheader("Source Filters")
     sources = st.multiselect(
