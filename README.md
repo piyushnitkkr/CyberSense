@@ -130,8 +130,8 @@ Key configuration options in `config.yaml` or overridden via environment variabl
 | `log_level` | `LOG_LEVEL` | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `qdrant_url` | `QDRANT_URL` | `http://localhost:6333` | Connection URL for Qdrant vector database |
 | `database_url` | `DATABASE_URL` | `sqlite+aiosqlite:///data/cybersense.db` | SQLAlchemy database URL for sessions and registry |
-| `generation.provider` | `LLM_PROVIDER` | `anthropic` | LLM backend (`anthropic`, `ollama`, or `fake`) |
-| `generation.model` | `LLM_MODEL` | `claude-3-5-haiku-20241022` | Name of the generative model |
+| `generation.provider` | `LLM_PROVIDER` | `groq` | LLM backend (`groq`, `anthropic`, `ollama`, or `fake`) |
+| `generation.model` | `LLM_MODEL` | `llama-3.1-8b-instant` | Name of the generative model |
 | `retrieval.top_k_retrieve` | `TOP_K_RETRIEVE` | `20` | Candidate chunks retrieved per retriever |
 | `retrieval.top_k_rerank` | `TOP_K_RERANK` | `8` | Final top-ranked chunks passed to the LLM |
 | `retrieval.relevance_threshold` | `RELEVANCE_THRESHOLD`| `0.35` | Minimum score required before abstaining |

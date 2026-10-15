@@ -28,8 +28,8 @@ retrieval:
 
 # ── Generation ────────────────────────────────────────────────────────────────
 generation:
-  provider: "anthropic"          # "anthropic" | "ollama"
-  model: "claude-3-5-haiku-20241022"
+  provider: "groq"               # "groq" | "anthropic" | "ollama" | "fake"
+  model: "llama-3.1-8b-instant"
   temperature: 0.1
   max_tokens: 1024
   history_turns: 6

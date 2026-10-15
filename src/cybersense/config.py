@@ -49,8 +49,8 @@ class RetrievalConfig(BaseSettings):
 
 
 class GenerationConfig(BaseSettings):
-    provider: str = "anthropic"
-    model: str = "claude-3-5-haiku-20241022"
+    provider: str = "groq"
+    model: str = "llama-3.1-8b-instant"
     temperature: float = 0.1
     max_tokens: int = 1024
     history_turns: int = 6
@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     database_url: str = Field(default="sqlite+aiosqlite:///data/cybersense.db", alias="DATABASE_URL")
 
     # Secrets (from .env only)
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
     nvd_api_key: str = Field(default="", alias="NVD_API_KEY")
     api_key: str = Field(default="", alias="API_KEY")

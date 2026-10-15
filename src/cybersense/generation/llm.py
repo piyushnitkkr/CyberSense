@@ -1,4 +1,4 @@
-"""LLMClient abstract interface + Anthropic, Ollama, and Fake implementations."""
+"""LLMClient abstract interface + Anthropic, Groq, Ollama, and Fake implementations."""
 
 from __future__ import annotations
 
@@ -18,6 +18,56 @@ class LLMClient(ABC):
     async def stream(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> AsyncIterator[str]:
         """Yield text tokens as they are generated."""
         ...
+
+
+# ── Groq ──────────────────────────────────────────────────────────────────────
+
+class GroqClient(LLMClient):
+    """Groq Cloud LLM client — free tier, ultra-fast inference."""
+
+    def __init__(self, api_key: str = "", model: str = "llama-3.1-8b-instant") -> None:
+        import os
+        key = api_key or os.environ.get("GROQ_API_KEY", "")
+        if not key:
+            raise ValueError(
+                "GROQ_API_KEY is not set. Please set GROQ_API_KEY in your .env file "
+                "or pass api_key directly (get a free key at https://console.groq.com)."
+            )
+        from groq import AsyncGroq
+        self._client = AsyncGroq(api_key=key)
+        self.model = model
+
+    async def generate(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> str:
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        response = await self._client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        return response.choices[0].message.content or ""
+
+    async def stream(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> AsyncIterator[str]:
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        stream = await self._client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            stream=True,
+        )
+        async for chunk in stream:
+            token = chunk.choices[0].delta.content
+            if token:
+                yield token
 
 
 # ── Anthropic ─────────────────────────────────────────────────────────────────
@@ -94,10 +144,12 @@ class FakeLLMClient(LLMClient):
 
 def build_llm_client(provider: str, settings) -> LLMClient:
     """Factory that builds the appropriate LLM client from settings."""
+    if provider == "groq":
+        return GroqClient(api_key=settings.groq_api_key, model=settings.generation.model)
     if provider == "anthropic":
         return AnthropicClient(api_key=settings.anthropic_api_key, model=settings.generation.model)
     if provider == "ollama":
         return OllamaClient(base_url=settings.ollama_base_url, model=settings.generation.model)
     if provider == "fake":
         return FakeLLMClient()
-    raise ValueError(f"Unknown LLM provider: {provider!r}. Use 'anthropic', 'ollama', or 'fake'.")
+    raise ValueError(f"Unknown LLM provider: {provider!r}. Use 'groq', 'anthropic', 'ollama', or 'fake'.")

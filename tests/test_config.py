@@ -13,7 +13,7 @@ def test_default_settings():
     assert settings.app_name == "CyberSense"
     assert settings.database_url.startswith("sqlite")
     assert settings.embedding.dimension == 384
-    assert settings.generation.provider in ["anthropic", "ollama", "fake"]
+    assert settings.generation.provider in ["groq", "anthropic", "ollama", "fake"]
     assert settings.retrieval.top_k_retrieve > 0
 
 
