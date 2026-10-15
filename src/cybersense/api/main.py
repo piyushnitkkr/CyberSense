@@ -27,14 +27,20 @@ async def lifespan(app: FastAPI):
     setup_logging(level=settings.log_level)
     logger.info("CyberSense API starting up")
     await init_db()
-    try:
-        from cybersense.api.deps import get_bm25, get_vector_store
-        from cybersense.api.routes_admin import rebuild_bm25_index
-        vs = get_vector_store(settings)
-        bm25 = get_bm25()
-        await rebuild_bm25_index(vs, bm25)
-    except Exception as exc:
-        logger.warning("Could not pre-populate BM25 index on startup", extra={"error": str(exc)})
+    import os
+    # Skip expensive BM25 preload on cloud/production to avoid OOM (512 MB free tier).
+    # Dense vector search via Qdrant still works. BM25 can be rebuilt on-demand via
+    # POST /api/v1/admin/rebuild-index if extra RAM becomes available.
+    if os.environ.get("APP_ENV", "development") != "production":
+        try:
+            from cybersense.api.deps import get_bm25, get_vector_store
+            from cybersense.api.routes_admin import rebuild_bm25_index
+            vs = get_vector_store(settings)
+            bm25 = get_bm25()
+            await rebuild_bm25_index(vs, bm25)
+        except Exception as exc:
+            logger.warning("Could not pre-populate BM25 index on startup", extra={"error": str(exc)})
+
     yield
     logger.info("CyberSense API shutting down")
 
