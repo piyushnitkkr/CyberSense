@@ -53,6 +53,17 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    logger.error("Unhandled exception: %s\n%s", exc, tb)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {exc}"},
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -65,6 +76,34 @@ app.add_middleware(
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(ingest_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
+
+
+@app.get("/test-groq", tags=["debug"])
+async def test_groq():
+    """Verify Groq API connectivity and key configuration."""
+    settings = get_settings()
+    key = settings.groq_api_key or ""
+    key_preview = f"{key[:6]}...{key[-4:]}" if len(key) > 10 else f"len={len(key)}"
+    try:
+        from cybersense.generation.llm import GroqClient
+        client = GroqClient(api_key=key, model=settings.generation.model)
+        answer = await client.generate("Say 'Groq is operational!' in 4 words.")
+        return {
+            "status": "ok",
+            "provider": settings.generation.provider,
+            "model": settings.generation.model,
+            "key": key_preview,
+            "response": answer,
+        }
+    except Exception as exc:
+        import traceback
+        return {
+            "status": "error",
+            "provider": settings.generation.provider,
+            "key": key_preview,
+            "error": f"{type(exc).__name__}: {exc}",
+            "traceback": traceback.format_exc(),
+        }
 
 
 @app.get("/", tags=["root"])
