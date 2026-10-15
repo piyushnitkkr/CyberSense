@@ -19,11 +19,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-CLOUD_URL = os.environ.get("QDRANT_CLOUD_URL", "")
-CLOUD_KEY = os.environ.get("QDRANT_CLOUD_KEY", "")
+CLOUD_URL = os.environ.get("QDRANT_CLOUD_URL") or os.environ.get("QDRANT_URL", "")
+CLOUD_KEY = os.environ.get("QDRANT_CLOUD_KEY") or os.environ.get("QDRANT_API_KEY", "")
 LOCAL_PATH = "data/qdrant_db"
 COLLECTION = "cybersense"
 BATCH_SIZE = 100
