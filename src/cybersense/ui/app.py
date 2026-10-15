@@ -78,15 +78,18 @@ with st.sidebar:
         )
         st.session_state.api_base = api_input.rstrip("/")
         if st.button("Test Connection", key="btn_test_conn"):
-            try:
-                r = requests.get(f"{st.session_state.api_base}/health", timeout=5)
-                if r.ok:
-                    data = r.json()
-                    st.success(f"Connected! (v{data.get('version', '1.0.0')})")
-                else:
-                    st.warning(f"Returned status {r.status_code}")
-            except Exception as e:
-                st.error(f"Cannot connect: {e}")
+            with st.spinner("Connecting to backend (Render may take ~20s to wake up)..."):
+                try:
+                    r = requests.get(f"{st.session_state.api_base}/health", timeout=30)
+                    if r.ok:
+                        data = r.json()
+                        api_chk = data.get("checks", {}).get("api", "ok")
+                        qd_chk = data.get("checks", {}).get("qdrant", "ok")
+                        st.success(f"✅ Connected! API: {api_chk} | Qdrant: {qd_chk}")
+                    else:
+                        st.warning(f"Returned status {r.status_code}")
+                except Exception as e:
+                    st.error(f"Cannot connect: {e}")
 
     API_BASE = st.session_state.api_base
 
