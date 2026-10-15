@@ -23,17 +23,29 @@ class LLMClient(ABC):
 # ── Groq ──────────────────────────────────────────────────────────────────────
 
 _GROQ_FALLBACK_MODELS = [
-    "qwen/qwen3.8-27b",
-    "openai/gpt-oss-20b",
     "llama-3.1-8b-instant",
+    "llama3-8b-8192",
     "llama-3.3-70b-versatile",
+    "gemma2-9b-it",
+    "mixtral-8x7b-32768",
+    "qwen/qwen3.8-27b",
 ]
+
+_GROQ_RETRY_ERRORS = (
+    "overloaded",
+    "rate_limit",
+    "rate limit",
+    "429",
+    "too many requests",
+    "service unavailable",
+    "503",
+)
 
 
 class GroqClient(LLMClient):
     """Groq Cloud LLM client — free tier, ultra-fast inference with automatic model fallback."""
 
-    def __init__(self, api_key: str = "", model: str = "qwen/qwen3.8-27b") -> None:
+    def __init__(self, api_key: str = "", model: str = "llama-3.1-8b-instant") -> None:
         import os
         key = api_key or os.environ.get("GROQ_API_KEY", "")
         if not key:
@@ -46,9 +58,10 @@ class GroqClient(LLMClient):
         self.model = model
 
     async def _try_create(self, messages: list[dict], max_tokens: int, temperature: float, stream: bool = False):
+        import asyncio
         models_to_try = [self.model] + [m for m in _GROQ_FALLBACK_MODELS if m != self.model]
         last_exc: Exception | None = None
-        for m in models_to_try:
+        for i, m in enumerate(models_to_try):
             try:
                 res = await self._client.chat.completions.create(
                     model=m,
@@ -57,14 +70,21 @@ class GroqClient(LLMClient):
                     temperature=temperature,
                     stream=stream,
                 )
-                self.model = m
+                self.model = m  # remember working model for next call
                 return res
             except Exception as e:
                 err_str = str(e).lower()
+                # Model doesn't exist for this key → try next
                 if "model_not_found" in err_str or "does not exist" in err_str or "access" in err_str:
                     last_exc = e
                     continue
-                raise
+                # Overloaded / rate-limited → brief backoff then try next model
+                if any(sig in err_str for sig in _GROQ_RETRY_ERRORS):
+                    last_exc = e
+                    wait = 2 + i * 2  # 2s, 4s, 6s …
+                    await asyncio.sleep(wait)
+                    continue
+                raise  # unexpected error — propagate immediately
         if last_exc:
             raise last_exc
 

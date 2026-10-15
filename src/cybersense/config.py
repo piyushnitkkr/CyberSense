@@ -50,7 +50,7 @@ class RetrievalConfig(BaseSettings):
 
 class GenerationConfig(BaseSettings):
     provider: str = "groq"
-    model: str = "qwen/qwen3.8-27b"
+    model: str = "llama-3.1-8b-instant"
     temperature: float = 0.1
     max_tokens: int = 1024
     history_turns: int = 6
