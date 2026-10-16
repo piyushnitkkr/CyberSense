@@ -18,7 +18,8 @@ def _get_default_api_base() -> str:
             return str(st.secrets["API_BASE_URL"]).rstrip("/")
     except Exception:
         pass
-    return "http://localhost:8000"
+    # Default to live Render backend for cloud deployment
+    return "https://cybersense-api-vorj.onrender.com"
 
 st.set_page_config(
     page_title="CyberSense — Cybersecurity RAG Chatbot",
@@ -111,15 +112,31 @@ with st.sidebar:
         type=["pdf", "docx", "md", "txt", "html"],
     )
     if uploaded and st.button("Ingest document", key="btn_ingest"):
-        with st.spinner("Ingesting…"):
-            resp = requests.post(
-                f"{API_BASE}/api/v1/documents",
-                files={"file": (uploaded.name, uploaded.getvalue(), uploaded.type)},
-            )
-            if resp.ok:
-                st.success(f"✅ Ingested: {resp.json()}")
-            else:
-                st.error(f"❌ {resp.text}")
+        with st.spinner("Ingesting and indexing document…"):
+            try:
+                content_type = uploaded.type or "application/octet-stream"
+                resp = requests.post(
+                    f"{API_BASE}/api/v1/documents",
+                    files={"file": (uploaded.name, uploaded.getvalue(), content_type)},
+                    timeout=120,
+                )
+                if resp.ok:
+                    data = resp.json()
+                    title = data.get("title", uploaded.name)
+                    doc_id = data.get("doc_ids", [""])[0]
+                    st.success(f"✅ Ingested successfully!\n\n**Document:** {title}\n\n**ID:** `{doc_id}`")
+                else:
+                    try:
+                        err = resp.json().get("detail", resp.text)
+                    except Exception:
+                        err = resp.text[:300]
+                    st.error(f"❌ {err}")
+            except requests.exceptions.Timeout:
+                st.error("❌ Ingestion timed out. The backend took too long to process the document.")
+            except requests.exceptions.ConnectionError:
+                st.error(f"❌ Cannot connect to backend at {API_BASE}. Please verify the Backend API URL.")
+            except Exception as exc:
+                st.error(f"❌ Upload failed: {exc}")
 
     st.divider()
     if st.button("🗑️ Clear chat", key="btn_clear"):

@@ -38,6 +38,7 @@ async def run(source: str, since: str | None, limit: int | None) -> None:
         url=settings.qdrant_url,
         collection=settings.qdrant.collection,
         dimension=settings.embedding.dimension,
+        api_key=settings.qdrant_api_key,
     )
     await init_db()
     await vector_store.ensure_collection()

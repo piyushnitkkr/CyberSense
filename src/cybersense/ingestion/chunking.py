@@ -121,6 +121,10 @@ def chunk_prose_document(
                     chunks.append(_make_chunk(doc, idx, sub_text, cfg, section_path=path))
                     idx += 1
 
+    # Fallback: if document has non-empty text but sections were shorter than min_tokens, preserve the text
+    if not chunks and doc.text.strip():
+        chunks.append(_make_chunk(doc, 0, doc.text.strip(), cfg, section_path=section_path_prefix))
+
     return chunks
 
 

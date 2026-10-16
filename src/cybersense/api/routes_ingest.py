@@ -51,21 +51,33 @@ async def upload_document(
         from cybersense.ingestion.markdown import MarkdownLoader
         from cybersense.ingestion.html import HTMLLoader
 
+        clean_title = Path(filename).stem.replace("-", " ").replace("_", " ").title()
+        doc_id = f"upload:{hashlib.sha256(filename.encode()).hexdigest()[:12]}"
+
         if suffix == ".pdf":
             loader = PDFLoader(source_label="upload", doc_type=DocType.upload)
             docs = list(loader.load(paths=[tmp_path]))
+            for d in docs:
+                d.title = clean_title
+                d.doc_id = doc_id
         elif suffix in (".md", ".markdown"):
             loader = MarkdownLoader(source_label="upload", doc_type=DocType.upload)
             docs = list(loader.load(paths=[tmp_path]))
+            for d in docs:
+                d.title = clean_title
+                d.doc_id = doc_id
         elif suffix in (".html", ".htm"):
             loader = HTMLLoader(source_label="upload", doc_type=DocType.upload)
             docs = list(loader.load(paths=[tmp_path]))
+            for d in docs:
+                d.title = clean_title
+                d.doc_id = doc_id
         elif suffix == ".txt":
             text = content.decode("utf-8", errors="replace")
             from cybersense.models import Document
             docs = [Document(
-                doc_id=f"upload:{hashlib.sha256(content).hexdigest()[:12]}",
-                source="upload", title=filename, doc_type=DocType.upload, text=text,
+                doc_id=doc_id,
+                source="upload", title=clean_title, doc_type=DocType.upload, text=text,
             )]
         elif suffix == ".docx":
             from docx import Document as DocxDocument
@@ -73,15 +85,30 @@ async def upload_document(
             text = "\n".join(p.text for p in docx.paragraphs)
             from cybersense.models import Document
             docs = [Document(
-                doc_id=f"upload:{hashlib.sha256(content).hexdigest()[:12]}",
-                source="upload", title=filename, doc_type=DocType.upload, text=text,
+                doc_id=doc_id,
+                source="upload", title=clean_title, doc_type=DocType.upload, text=text,
             )]
         else:
             raise HTTPException(status_code=400, detail="Unsupported file type")
 
+        if not docs or not any(d.text.strip() for d in docs):
+            raise HTTPException(
+                status_code=400,
+                detail="No readable text could be extracted from this file. If this is a scanned document or image-only PDF, please upload a text-searchable PDF.",
+            )
+
         pipeline = IngestionPipeline(db, vector_store, embedder, settings)
         run = await pipeline.run("upload", iter(docs))
-        return {"status": "ok", "added": run.added, "updated": run.updated, "doc_ids": [d.doc_id for d in docs]}
+        if run.failed > 0 and run.added == 0 and run.updated == 0:
+            raise HTTPException(status_code=500, detail=f"Ingestion failed: {run.error or 'Failed to index chunks'}")
+
+        return {
+            "status": "ok",
+            "added": run.added,
+            "updated": run.updated,
+            "title": clean_title,
+            "doc_ids": [d.doc_id for d in docs],
+        }
     finally:
         tmp_path.unlink(missing_ok=True)
 
