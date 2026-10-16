@@ -112,6 +112,69 @@ async def test_groq():
         }
 
 
+@app.get("/debug/embed", tags=["debug"])
+async def debug_embed():
+    """Test embedding model loading and query embedding in isolation."""
+    import time
+    from cybersense.api.deps import get_embedder
+    settings = get_settings()
+    try:
+        t0 = time.perf_counter()
+        embedder = get_embedder(settings)
+        vec = embedder.encode_query("What is Log4Shell?")
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+
+        rss_mb = None
+        try:
+            with open("/proc/self/status") as f:
+                for line in f:
+                    if line.startswith("VmRSS:"):
+                        rss_mb = round(int(line.split()[1]) / 1024, 2)
+                        break
+        except Exception:
+            pass
+
+        return {
+            "status": "ok",
+            "backend": "fastembed" if getattr(embedder, "_use_fastembed", None) else "sentence-transformers",
+            "dimension": len(vec),
+            "sample": vec[:3],
+            "latency_ms": round(elapsed_ms, 2),
+            "vm_rss_mb": rss_mb,
+        }
+    except Exception as exc:
+        import traceback
+        return {
+            "status": "error",
+            "error": f"{type(exc).__name__}: {exc}",
+            "traceback": traceback.format_exc(),
+        }
+
+
+@app.get("/debug/system", tags=["debug"])
+async def debug_system():
+    """Inspect memory and system state on the server."""
+    import os
+    info: dict = {"pid": os.getpid(), "env": os.environ.get("APP_ENV", "unknown")}
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if any(line.startswith(k) for k in ("VmRSS:", "VmSize:", "VmPeak:")):
+                    parts = line.split()
+                    info[parts[0].rstrip(":")] = f"{int(parts[1]) // 1024} MB"
+    except Exception:
+        pass
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if any(line.startswith(k) for k in ("MemTotal:", "MemFree:", "MemAvailable:")):
+                    parts = line.split()
+                    info[parts[0].rstrip(":")] = f"{int(parts[1]) // 1024} MB"
+    except Exception:
+        pass
+    return info
+
+
 @app.get("/", tags=["root"])
 async def root() -> dict:
     """Root info endpoint."""

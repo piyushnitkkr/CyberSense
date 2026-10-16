@@ -26,21 +26,36 @@ class EmbeddingModel:
         if self._model is not None:
             return
 
+        import os
+        cache_dir = os.environ.get("FASTEMBED_CACHE_PATH")
+
         # Try fastembed first (lightweight ONNX, no torch)
         try:
             from fastembed import TextEmbedding
-            logger.info("Loading embedding model via fastembed (ONNX)", extra={"model": self.model_name})
-            self._model = TextEmbedding(model_name=self.model_name)
+            logger.info("Loading embedding model via fastembed (ONNX)", extra={"model": self.model_name, "cache_dir": cache_dir})
+            self._model = TextEmbedding(
+                model_name=self.model_name,
+                cache_dir=cache_dir,
+                threads=1,
+                enable_cpu_mem_arena=False,
+            )
             self._use_fastembed = True
+            logger.info("FastEmbed model initialized successfully")
             return
-        except (ImportError, Exception) as fe_err:
-            logger.warning("fastembed not available, falling back to sentence-transformers", extra={"error": str(fe_err)})
+        except ImportError:
+            logger.info("fastembed not installed, checking sentence-transformers")
+        except Exception as fe_err:
+            logger.warning("fastembed failed to initialize", extra={"error": str(fe_err)})
 
         # Fallback: sentence-transformers (requires torch)
-        from sentence_transformers import SentenceTransformer
-        logger.info("Loading embedding model via sentence-transformers", extra={"model": self.model_name})
-        self._model = SentenceTransformer(self.model_name, device=self.device)
-        self._use_fastembed = False
+        try:
+            from sentence_transformers import SentenceTransformer
+            logger.info("Loading embedding model via sentence-transformers", extra={"model": self.model_name})
+            self._model = SentenceTransformer(self.model_name, device=self.device)
+            self._use_fastembed = False
+        except Exception as st_err:
+            logger.error("Failed to load any embedding model", extra={"st_error": str(st_err)})
+            raise RuntimeError(f"Could not load embedding backend: {st_err}") from st_err
 
     def encode(self, texts: list[str], normalize: bool = True) -> list[list[float]]:
         """Return list of embedding vectors."""
