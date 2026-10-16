@@ -47,8 +47,8 @@ class PDFLoader(BaseLoader):
         pages_text: list[str] = []
         # Cap to first 50 pages to prevent memory exhaustion on free tier
         max_pages = 50
-        # Also cap total text length to prevent chunking OOM (approx 500KB of text)
-        max_text_length = 500_000
+        # Cap total text length to prevent OOM (200KB ≈ 50 chunks at 4KB each on Render's 512MB)
+        max_text_length = 200_000
         total_text_length = 0
 
         for i, page in enumerate(doc):
