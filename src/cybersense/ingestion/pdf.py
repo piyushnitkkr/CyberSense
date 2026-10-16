@@ -47,13 +47,22 @@ class PDFLoader(BaseLoader):
         pages_text: list[str] = []
         # Cap to first 50 pages to prevent memory exhaustion on free tier
         max_pages = 50
+        # Also cap total text length to prevent chunking OOM (approx 500KB of text)
+        max_text_length = 500_000
+        total_text_length = 0
+
         for i, page in enumerate(doc):
             if i >= max_pages:
                 logger.info("PDF: reached max_pages limit", extra={"max_pages": max_pages, "total_pages": len(doc)})
                 break
             text = page.get_text("text") or ""
             if text.strip():
+                # Check if adding this page would exceed the text limit
+                if total_text_length + len(text) > max_text_length:
+                    logger.info("PDF: reached max_text_length limit", extra={"max_text_length": max_text_length, "total_pages_processed": i})
+                    break
                 pages_text.append(text)
+                total_text_length += len(text)
         doc.close()
         del doc
         import gc

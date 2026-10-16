@@ -137,7 +137,16 @@ class IngestionPipeline:
             return "skipped"
 
         # Chunk the document
-        chunks = self._chunk(doc)
+        try:
+            chunks = self._chunk(doc)
+        except MemoryError:
+            logger.warning("MemoryError during chunking, using simplified fallback for large document", extra={"doc_id": doc.doc_id})
+            # Fallback: create a single chunk with truncated text
+            truncated_text = doc.text[:100000]  # Truncate to ~100KB
+            chunks = self._create_simple_chunks(doc, truncated_text)
+        except Exception as exc:
+            logger.error("Failed to chunk document", extra={"doc_id": doc.doc_id, "error": str(exc)})
+            raise
 
         # Cap chunks to avoid OOM or timeout on free tier (80 chunks ≈ 40,000 words)
         MAX_CHUNKS = 80
@@ -185,3 +194,43 @@ class IngestionPipeline:
         if doc.doc_type in _STRUCTURED_TYPES:
             return chunk_structured_record(doc, self.chunk_cfg)
         return chunk_prose_document(doc, self.chunk_cfg)
+
+    def _create_simple_chunks(self, doc: Document, text: str) -> list[Chunk]:
+        """Simplified chunking fallback for large documents when memory is limited."""
+        from cybersense.ingestion.enrich import extract_ids
+
+        # Create just a few large chunks instead of many small ones
+        chunk_size = 50_000  # ~50KB per chunk
+        chunks = []
+        idx = 0
+
+        for i in range(0, len(text), chunk_size):
+            chunk_text = text[i : i + chunk_size]
+            meta = ChunkMetadata(
+                source=doc.source,
+                doc_id=doc.doc_id,
+                doc_type=doc.doc_type.value,
+                title=doc.title,
+                section_path=doc.metadata.get("section_path", ""),
+                url=doc.url,
+                page=doc.metadata.get("page"),
+                published_date=doc.metadata.get("published_date"),
+                modified_date=doc.metadata.get("modified_date"),
+                ids=extract_ids(chunk_text),
+                severity=doc.metadata.get("severity"),
+                cvss=doc.metadata.get("cvss"),
+                content_hash=doc.content_hash,
+            )
+            chunks.append(Chunk(
+                chunk_id=f"{doc.doc_id}:{idx}",
+                doc_id=doc.doc_id,
+                text=chunk_text,
+                index=idx,
+                metadata=meta,
+            ))
+            idx += 1
+            # Safety: cap at 10 chunks in fallback mode
+            if idx >= 10:
+                break
+
+        return chunks
