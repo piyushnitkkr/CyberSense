@@ -139,6 +139,12 @@ class IngestionPipeline:
         # Chunk the document
         chunks = self._chunk(doc)
 
+        # Cap chunks to avoid OOM or timeout on free tier (80 chunks ≈ 40,000 words)
+        MAX_CHUNKS = 80
+        if len(chunks) > MAX_CHUNKS:
+            logger.info("Capping document chunks for memory safety", extra={"doc_id": doc.doc_id, "original": len(chunks), "capped": MAX_CHUNKS})
+            chunks = chunks[:MAX_CHUNKS]
+
         # Embed
         texts = [c.text for c in chunks]
         vectors = self.embedder.encode(texts)

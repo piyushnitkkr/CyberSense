@@ -63,7 +63,8 @@ class EmbeddingModel:
             return []
         self._load()
         if self._use_fastembed:
-            embeddings = list(self._model.embed(texts))
+            batch_sz = max(1, min(self.batch_size, 8))
+            embeddings = list(self._model.embed(texts, batch_size=batch_sz))
             return [e.tolist() for e in embeddings]
         else:
             import numpy as np

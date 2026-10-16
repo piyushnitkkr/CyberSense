@@ -9,7 +9,7 @@ services:
     region: singapore  # Closest free region to India
     plan: free
     buildCommand: >
-      pip install --no-cache-dir -r requirements-server.txt &&
+      pip install -r requirements-server.txt &&
       pip install --no-deps -e . &&
       python -c "import os; from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir=os.environ.get('FASTEMBED_CACHE_PATH', '/opt/render/project/src/.fastembed_cache'))"
     startCommand: uvicorn cybersense.api.main:app --host 0.0.0.0 --port $PORT

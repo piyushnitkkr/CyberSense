@@ -45,9 +45,19 @@ class PDFLoader(BaseLoader):
     def _pdf_to_document(self, path: Path, fitz) -> Document:
         doc = fitz.open(str(path))
         pages_text: list[str] = []
-        for page in doc:
-            pages_text.append(page.get_text("text") or "")
+        # Cap to first 50 pages to prevent memory exhaustion on free tier
+        max_pages = 50
+        for i, page in enumerate(doc):
+            if i >= max_pages:
+                logger.info("PDF: reached max_pages limit", extra={"max_pages": max_pages, "total_pages": len(doc)})
+                break
+            text = page.get_text("text") or ""
+            if text.strip():
+                pages_text.append(text)
         doc.close()
+        del doc
+        import gc
+        gc.collect()
 
         full_text = "\n\n".join(pages_text)
         title = path.stem.replace("-", " ").replace("_", " ").title()
