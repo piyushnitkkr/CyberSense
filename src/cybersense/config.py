@@ -25,7 +25,7 @@ def _load_yaml() -> dict[str, Any]:
 class EmbeddingConfig(BaseSettings):
     model: str = "BAAI/bge-small-en-v1.5"
     device: str = "cpu"
-    batch_size: int = 64
+    batch_size: int = 16  # keep low to reduce RAM on free-tier deployments
     dimension: int = 384
 
 
@@ -37,14 +37,16 @@ class ChunkingConfig(BaseSettings):
 
 
 class RetrievalConfig(BaseSettings):
-    k_dense: int = 30
-    k_sparse: int = 30
-    k_fused: int = 30
-    top_k_retrieve: int = 30
-    top_k_final: int = 8
+    k_dense: int = 20
+    k_sparse: int = 20
+    k_fused: int = 20
+    top_k_retrieve: int = 20
+    top_k_final: int = 6
     relevance_threshold: float = 0.3
     max_chunks_per_doc: int = 3
-    reranker_enabled: bool = True
+    # Reranker is disabled by default to save ~400 MB RAM on free-tier cloud.
+    # Enable locally or on paid plans by setting RERANKER_ENABLED=true.
+    reranker_enabled: bool = False
     reranker_model: str = "BAAI/bge-reranker-base"
 
 
