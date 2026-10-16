@@ -21,3 +21,4 @@ data/*.db
 eval/reports/
 .coverage
 coverage.xml
+test_doc.pdf
