@@ -35,40 +35,61 @@ class PDFLoader(BaseLoader):
 
         for filepath in files:
             try:
-                yield self._pdf_to_document(filepath, fitz)
+                yield self._pdf_to_document_stream(filepath, fitz)
             except Exception as exc:
                 logger.warning(
                     "PDF: skipping file",
                     extra={"path": str(filepath), "error": str(exc)},
                 )
 
-    def _pdf_to_document(self, path: Path, fitz) -> Document:
+    def _pdf_to_document_stream(self, path: Path, fitz) -> Document:
+        """Stream PDF processing to minimize memory usage - process one page at a time."""
         doc = fitz.open(str(path))
-        pages_text: list[str] = []
-        # Cap to first 25 pages to prevent memory exhaustion on Render 512MB free tier
-        max_pages = 25
-        # Cap total text length to prevent OOM (100KB ≈ 25 chunks on Render's 512MB)
-        max_text_length = 100_000
-        total_text_length = 0
 
-        for i, page in enumerate(doc):
-            if i >= max_pages:
-                logger.info("PDF: reached max_pages limit", extra={"max_pages": max_pages, "total_pages": len(doc)})
-                break
-            text = page.get_text("text") or ""
-            if text.strip():
-                # Check if adding this page would exceed the text limit
-                if total_text_length + len(text) > max_text_length:
-                    logger.info("PDF: reached max_text_length limit", extra={"max_text_length": max_text_length, "total_pages_processed": i})
+        # Memory-conscious limits for Render's 512MB free tier
+        max_pages = 15  # Further reduced for safety
+        max_chars_per_page = 3000  # ~750 tokens per page max
+        max_total_chars = 25000  # ~6250 tokens total (~25 chunks of 250 chars)
+
+        processed_chars = 0
+        processed_pages = 0
+        all_text_parts = []  # Will hold limited text chunks
+
+        try:
+            for page_num in range(min(len(doc), max_pages)):
+                page = doc[page_num]
+                text = page.get_text("text") or ""
+
+                if not text.strip():
+                    continue
+
+                # Limit text per page to prevent memory spikes
+                if len(text) > max_chars_per_page:
+                    text = text[:max_chars_per_page] + "... [truncated]"
+                    logger.info(f"PDF: page {page_num} text truncated to {max_chars_per_page} chars")
+
+                # Check if adding this page would exceed total limit
+                if processed_chars + len(text) > max_total_chars:
+                    logger.info(f"PDF: reached total char limit at page {page_num}")
                     break
-                pages_text.append(text)
-                total_text_length += len(text)
-        doc.close()
-        del doc
-        import gc
-        gc.collect()
 
-        full_text = "\n\n".join(pages_text)
+                all_text_parts.append(text)
+                processed_chars += len(text)
+                processed_pages += 1
+
+                # Early break if we have enough content
+                if processed_pages >= 5 and processed_chars > 10000:  # Reasonable minimum
+                    break
+
+        finally:
+            doc.close()
+            # Explicit cleanup
+            del doc
+            import gc
+            gc.collect()
+
+        # Join text with minimal overhead
+        full_text = "\n\n".join(all_text_parts)
         title = path.stem.replace("-", " ").replace("_", " ").title()
         content_hash = hashlib.sha256(full_text.encode()).hexdigest()
         doc_id = f"{self.source_label}:{path.stem}"
@@ -82,7 +103,7 @@ class PDFLoader(BaseLoader):
             text=full_text,
             metadata={
                 "file_path": str(path),
-                "page_count": len(pages_text),
+                "page_count": processed_pages,
             },
             content_hash=content_hash,
         )

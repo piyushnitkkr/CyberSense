@@ -18,7 +18,7 @@ from cybersense.ingestion.chunking import (
     chunk_structured_record,
 )
 from cybersense.logging import get_logger
-from cybersense.models import Chunk, DocType, Document
+from cybersense.models import Chunk, ChunkMetadata, DocType, Document
 
 if TYPE_CHECKING:
     from cybersense.retrieval.embeddings import EmbeddingModel
@@ -136,36 +136,31 @@ class IngestionPipeline:
         if existing and existing.content_hash == doc.content_hash:
             return "skipped"
 
-        # Chunk the document
+        # Ultra-lightweight chunking to prevent any memory issues
         try:
-            chunks = self._chunk(doc)
-        except MemoryError:
-            logger.warning("MemoryError during chunking, using simplified fallback for large document", extra={"doc_id": doc.doc_id})
-            # Fallback: create a single chunk with truncated text
-            truncated_text = doc.text[:100000]  # Truncate to ~100KB
-            chunks = self._create_simple_chunks(doc, truncated_text)
+            chunks = self._ultra_light_chunk(doc)
         except Exception as exc:
             logger.error("Failed to chunk document", extra={"doc_id": doc.doc_id, "error": str(exc)})
             raise
 
-        # Cap chunks to avoid OOM on Render's 512MB (25 chunks max)
-        MAX_CHUNKS = 25
+        # Cap chunks aggressively for Render's 512MB limit
+        MAX_CHUNKS = 10
         if len(chunks) > MAX_CHUNKS:
             logger.info("Capping document chunks for memory safety", extra={"doc_id": doc.doc_id, "original": len(chunks), "capped": MAX_CHUNKS})
             chunks = chunks[:MAX_CHUNKS]
 
-        # Embed in very small batches to prevent OOM on free tier
+        # Ultra-small batch embedding for safety
         texts = [c.text for c in chunks]
-        if len(texts) > 0:
+        if texts:
             vectors = []
-            batch_size = 8
-            for i in range(0, len(texts), batch_size):
-                batch = texts[i:i + batch_size]
+            for i in range(0, len(texts), 2):  # Batch of 2
+                batch = texts[i:i + 2]
                 batch_vectors = self.embedder.encode(batch)
                 vectors.extend(batch_vectors)
-                # Force garbage collection between batches
                 import gc
                 gc.collect()
+        else:
+            vectors = []
 
         # Upsert into vector store (removes old chunks, inserts new)
         await self.vector_store.upsert_chunks(doc.doc_id, chunks, vectors)
@@ -198,6 +193,92 @@ class IngestionPipeline:
 
         await self.session.commit()
         return action
+
+    def _ultra_light_chunk(self, doc: Document) -> list[Chunk]:
+        """Extremely lightweight chunking that uses minimal memory."""
+        from cybersense.ingestion.enrich import extract_ids
+
+        text = doc.text
+        if not text.strip():
+            return []
+
+        # Limit total text processed to prevent any memory issues
+        max_text_length = 15000  # ~3750 tokens - very conservative
+        if len(text) > max_text_length:
+            text = text[:max_text_length] + "... [content truncated for memory safety]"
+            logger.info(
+                "PDF: text truncated for memory safety",
+                extra={"doc_id": doc.doc_id, "original_length": len(doc.text), "truncated": max_text_length},
+            )
+
+        # Create minimal number of chunks
+        chunk_size = 7500  # ~1875 tokens per chunk
+        chunks = []
+        idx = 0
+        max_chunks = 3
+
+        for i in range(0, min(len(text), max_chunks * chunk_size), chunk_size):
+            if idx >= max_chunks:
+                break
+
+            chunk_text = text[i : i + chunk_size]
+            if not chunk_text.strip():
+                continue
+
+            meta = ChunkMetadata(
+                source=doc.source,
+                doc_id=doc.doc_id,
+                doc_type=doc.doc_type.value,
+                title=doc.title,
+                section_path=doc.metadata.get("section_path", ""),
+                url=doc.url,
+                page=doc.metadata.get("page"),
+                published_date=doc.metadata.get("published_date"),
+                modified_date=doc.metadata.get("modified_date"),
+                ids=extract_ids(chunk_text),
+                severity=doc.metadata.get("severity"),
+                cvss=doc.metadata.get("cvss"),
+                content_hash=doc.content_hash,
+            )
+            chunks.append(
+                Chunk(
+                    chunk_id=f"{doc.doc_id}:{idx}",
+                    doc_id=doc.doc_id,
+                    text=chunk_text,
+                    index=idx,
+                    metadata=meta,
+                )
+            )
+            idx += 1
+
+        # Ensure we have at least one chunk if there's text
+        if not chunks and text.strip():
+            meta = ChunkMetadata(
+                source=doc.source,
+                doc_id=doc.doc_id,
+                doc_type=doc.doc_type.value,
+                title=doc.title,
+                section_path=doc.metadata.get("section_path", ""),
+                url=doc.url,
+                page=doc.metadata.get("page"),
+                published_date=doc.metadata.get("published_date"),
+                modified_date=doc.metadata.get("modified_date"),
+                ids=extract_ids(text[:1000]),
+                severity=doc.metadata.get("severity"),
+                cvss=doc.metadata.get("cvss"),
+                content_hash=doc.content_hash,
+            )
+            chunks.append(
+                Chunk(
+                    chunk_id=f"{doc.doc_id}:0",
+                    doc_id=doc.doc_id,
+                    text=text[:1000],
+                    index=0,
+                    metadata=meta,
+                )
+            )
+
+        return chunks
 
     def _chunk(self, doc: Document) -> list[Chunk]:
         if doc.doc_type in _STRUCTURED_TYPES:
