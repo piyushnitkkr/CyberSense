@@ -148,26 +148,24 @@ class IngestionPipeline:
             logger.error("Failed to chunk document", extra={"doc_id": doc.doc_id, "error": str(exc)})
             raise
 
-        # Cap chunks to avoid OOM or timeout on free tier (50 chunks ≈ 25,000 words on Render's 512MB)
-        MAX_CHUNKS = 50
+        # Cap chunks to avoid OOM on Render's 512MB (25 chunks max)
+        MAX_CHUNKS = 25
         if len(chunks) > MAX_CHUNKS:
             logger.info("Capping document chunks for memory safety", extra={"doc_id": doc.doc_id, "original": len(chunks), "capped": MAX_CHUNKS})
             chunks = chunks[:MAX_CHUNKS]
 
-        # Embed in smaller batches to prevent OOM on free tier
+        # Embed in very small batches to prevent OOM on free tier
         texts = [c.text for c in chunks]
-        if len(texts) > 16:
-            # Process in batches of 16 to stay under memory limits
+        if len(texts) > 0:
             vectors = []
-            for i in range(0, len(texts), 16):
-                batch = texts[i:i + 16]
+            batch_size = 8
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i:i + batch_size]
                 batch_vectors = self.embedder.encode(batch)
                 vectors.extend(batch_vectors)
                 # Force garbage collection between batches
                 import gc
                 gc.collect()
-        else:
-            vectors = self.embedder.encode(texts)
 
         # Upsert into vector store (removes old chunks, inserts new)
         await self.vector_store.upsert_chunks(doc.doc_id, chunks, vectors)

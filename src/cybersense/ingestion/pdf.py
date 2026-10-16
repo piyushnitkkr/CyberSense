@@ -45,10 +45,10 @@ class PDFLoader(BaseLoader):
     def _pdf_to_document(self, path: Path, fitz) -> Document:
         doc = fitz.open(str(path))
         pages_text: list[str] = []
-        # Cap to first 50 pages to prevent memory exhaustion on free tier
-        max_pages = 50
-        # Cap total text length to prevent OOM (200KB ≈ 50 chunks at 4KB each on Render's 512MB)
-        max_text_length = 200_000
+        # Cap to first 25 pages to prevent memory exhaustion on Render 512MB free tier
+        max_pages = 25
+        # Cap total text length to prevent OOM (100KB ≈ 25 chunks on Render's 512MB)
+        max_text_length = 100_000
         total_text_length = 0
 
         for i, page in enumerate(doc):
