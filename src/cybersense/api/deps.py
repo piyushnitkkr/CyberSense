@@ -62,6 +62,10 @@ def get_vector_store(settings: Settings = Depends(get_settings)) -> VectorStore:
 def get_reranker(settings: Settings = Depends(get_settings)) -> Reranker | None:
     if not settings.retrieval.reranker_enabled:
         return None
+    try:
+        import sentence_transformers  # noqa: F401
+    except ImportError:
+        return None
     r = settings.retrieval
     return _get_reranker(r.reranker_model, settings.embedding.device)
 

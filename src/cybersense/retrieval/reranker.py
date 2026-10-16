@@ -19,15 +19,22 @@ class Reranker:
     @property
     def model(self):
         if self._model is None:
-            from sentence_transformers import CrossEncoder
-            logger.info("Loading reranker model", extra={"model": self.model_name})
-            self._model = CrossEncoder(self.model_name, device=self.device)
+            try:
+                from sentence_transformers import CrossEncoder
+                logger.info("Loading reranker model", extra={"model": self.model_name})
+                self._model = CrossEncoder(self.model_name, device=self.device)
+            except ImportError:
+                logger.warning("sentence-transformers not installed; reranking disabled")
+                self._model = False
         return self._model
 
     def rerank(self, query: str, chunks: list[RetrievedChunk], top_k: int = 8) -> list[RetrievedChunk]:
         """Score each chunk against the query and return top_k."""
         if not chunks:
             return []
+
+        if not self.model:
+            return chunks[:top_k]
 
         pairs = [[query, chunk.text] for chunk in chunks]
         scores = self.model.predict(pairs).tolist()

@@ -23,7 +23,7 @@ retrieval:
   top_k_final: 8       # after reranker
   relevance_threshold: 0.3
   max_chunks_per_doc: 3
-  reranker_enabled: true
+  reranker_enabled: false
   reranker_model: "BAAI/bge-reranker-base"
 
 # ── Generation ────────────────────────────────────────────────────────────────
