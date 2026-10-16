@@ -102,7 +102,7 @@ with st.sidebar:
     )
 
     top_k = st.slider("Top-K results", min_value=3, max_value=15, value=8)
-    reranker_on = st.checkbox("Enable reranker", value=True)
+    reranker_on = st.checkbox("Enable cross-encoder reranker", value=False, help="Disabled by default on free-tier deployments to save RAM.")
 
     st.divider()
     st.subheader("📄 Upload Document")
@@ -191,15 +191,24 @@ if prompt := st.chat_input("Ask a cybersecurity question…"):
                 _render_citations(citations)
             else:
                 try:
-                    err = resp.json().get("detail", resp.text)
+                    data = resp.json()
+                    err = data.get("detail", str(data))
                 except Exception:
-                    err = resp.text
+                    if resp.status_code in (502, 503, 504) or resp.text.strip().startswith("<"):
+                        err = f"Backend service is temporarily unavailable or restarting (HTTP {resp.status_code}). Please try again in 15-20 seconds."
+                    else:
+                        err = resp.text[:300]
                 placeholder.error(f"❌ {err}")
                 full_answer = f"Error: {err}"
 
+        except requests.exceptions.Timeout:
+            err_msg = "Request timed out waiting for backend. On Render free tier, the first request may take ~30s to wake up."
+            placeholder.error(f"❌ {err_msg}")
+            full_answer = err_msg
         except requests.exceptions.ConnectionError:
-            placeholder.error("❌ Cannot connect to API. Is the backend running?")
-            full_answer = "Connection error."
+            err_msg = "Cannot connect to API. Is the backend URL correct and the service running?"
+            placeholder.error(f"❌ {err_msg}")
+            full_answer = err_msg
 
         st.session_state.messages.append({
             "role": "assistant",
