@@ -53,6 +53,7 @@ class ChunkMetadata(BaseModel):
     cvss: float | None = None
     ingested_at: str = ""
     content_hash: str = ""
+    session_id: str = ""  # Session-scoped caching (empty for permanent docs)
 
 
 class Chunk(BaseModel):

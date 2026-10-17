@@ -1,10 +1,11 @@
 #!/usr/bin/env python
-"""Quick diagnostic to test if ingestion → retrieval pipeline works."""
+"""Quick diagnostic to test if ingestion -> retrieval pipeline works."""
 
 import asyncio
 import sys
 from pathlib import Path
 
+sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from cybersense.config import get_settings
@@ -35,31 +36,32 @@ async def main():
     try:
         collection_info = await vector_store.client.get_collection(settings.qdrant.collection)
         point_count = collection_info.points_count
-        print(f"✓ Connected to Qdrant")
-        print(f"✓ Collection '{settings.qdrant.collection}' has {point_count} chunks")
+        print(f"[OK] Connected to Qdrant")
+        print(f"[OK] Collection '{settings.qdrant.collection}' has {point_count} chunks")
 
         if point_count == 0:
-            print("\n❌ WARNING: Vector DB is empty! No chunks indexed.")
-            print("   Please upload a document first via the Streamlit UI or API.")
+            print("\n[WARN] Vector DB is EMPTY! No chunks indexed.")
+            print("   Upload a document first via Streamlit sidebar.")
             return
 
         # Try a test search
-        print(f"\n🔍 Testing retrieval with sample query...")
-        test_query = "cybersecurity threat detection"
+        print(f"\n[INFO] Testing retrieval with sample query...")
+        test_query = "cybersecurity access control policy"
         query_vec = embedder.encode_query(test_query)
 
-        results = await vector_store.search(query_vec, limit=3)
+        results = await vector_store.search(query_vec, limit=5)
 
         if results:
-            print(f"✓ Retrieved {len(results)} chunks:")
+            print(f"[OK] Retrieved {len(results)} chunks:")
             for i, chunk in enumerate(results, 1):
                 print(f"  [{i}] Score: {chunk.score:.3f} | Doc: {chunk.metadata.doc_id} | Title: {chunk.metadata.title}")
-                print(f"      Text preview: {chunk.text[:100]}...")
+                print(f"      Text: {chunk.text[:120]}...")
         else:
-            print("❌ No results retrieved!")
+            print("[FAIL] No results retrieved even though DB has chunks!")
+            print("   This suggests a search/filter issue.")
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] {e}")
         import traceback
         traceback.print_exc()
 

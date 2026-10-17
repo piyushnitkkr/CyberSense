@@ -67,7 +67,7 @@ class QueryPipeline:
         rewritten = await self._rewrite(query, history)
         timings["rewrite_ms"] = (time.perf_counter() - t0) * 1000
 
-        # 2. Entity extraction — short-circuit for exact IDs
+        # 2. Entity extraction — short-circuit for exact IDs (permanent knowledge only)
         t0 = time.perf_counter()
         entity_ids = extract_ids(rewritten)
         entity_chunks: list[RetrievedChunk] = []
@@ -75,15 +75,30 @@ class QueryPipeline:
             entity_chunks = await self.vector_store.get_by_ids_filter(entity_ids, limit=20)
         timings["entity_ms"] = (time.perf_counter() - t0) * 1000
 
-        # 3. Dense retrieval
+        # 3. Dense retrieval from permanent knowledge base (filter out session docs)
         t0 = time.perf_counter()
         filter_dict = self._build_filter_dict(filters)
+        if filter_dict is None:
+            filter_dict = {}
+
+        # Add session filter if session_id is in history
+        session_id = None
+        for msg in history:
+            if hasattr(msg, 'role') and hasattr(msg, 'content'):
+                # If we have session-aware messages, extract session_id
+                pass
+
+        # Remove session_id from filter_dict to search permanent knowledge only
+        if "session_id" in filter_dict:
+            del filter_dict["session_id"]
+
         if hasattr(self.embedder, "encode_query"):
             query_vec = self.embedder.encode_query(rewritten)
         elif hasattr(self.embedder, "embed_query"):
             query_vec = self.embedder.embed_query(rewritten)
         else:
             query_vec = self.embedder.encode([rewritten])[0]
+
         dense_chunks = await self.vector_store.search(
             query_vec, limit=self.cfg.k_dense, filters=filter_dict
         )

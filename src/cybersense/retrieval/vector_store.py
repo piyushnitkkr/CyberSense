@@ -179,6 +179,11 @@ class VectorStore:
             conditions.append(
                 models.FieldCondition(key="doc_type", match=models.MatchAny(any=doc_types))
             )
+        if session_id := filters.get("session_id"):
+            # For session-scoped search, match documents with this session_id
+            conditions.append(
+                models.FieldCondition(key="session_id", match=models.MatchValue(value=session_id))
+            )
         return models.Filter(must=conditions) if conditions else models.Filter()
 
     @staticmethod

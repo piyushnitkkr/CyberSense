@@ -46,6 +46,10 @@ async def upload_document(
         tmp.write(content)
         tmp_path = Path(tmp.name)
 
+    # Import session cache for temporary processing
+    from cybersense.api.deps import get_session_cache
+    session_cache = get_session_cache()
+
     try:
         from cybersense.ingestion.pdf import PDFLoader
         from cybersense.ingestion.markdown import MarkdownLoader
