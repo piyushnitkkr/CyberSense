@@ -63,6 +63,9 @@ class QueryPipeline:
         timings: dict[str, float] = {}
         history = history or []
 
+        # Resolve top_k — prefer user-supplied value, fall back to config default
+        top_k_final = (filters.top_k if filters and filters.top_k else None) or self.cfg.top_k_final
+
         # 1. Query rewrite
         t0 = time.perf_counter()
         rewritten = await self._rewrite(query, history)
@@ -76,12 +79,11 @@ class QueryPipeline:
             entity_chunks = await self.vector_store.get_by_ids_filter(entity_ids, limit=20)
         timings["entity_ms"] = (time.perf_counter() - t0) * 1000
 
-        # 3. Dense retrieval from permanent knowledge base (filter out session docs)
+        # 3. Dense retrieval (with source/doc_type filter applied in Qdrant)
         t0 = time.perf_counter()
         filter_dict = self._build_filter_dict(filters)
         if filter_dict is None:
             filter_dict = {}
-
 
         if hasattr(self.embedder, "encode_query"):
             query_vec = self.embedder.encode_query(rewritten)
@@ -95,9 +97,16 @@ class QueryPipeline:
         )
         timings["dense_ms"] = (time.perf_counter() - t0) * 1000
 
-        # 4. Sparse (BM25) retrieval
+        # 4. Sparse (BM25) retrieval — apply source filter post-hoc
         t0 = time.perf_counter()
         sparse_chunks = self.bm25.search(rewritten, k=self.cfg.k_sparse)
+        # Filter BM25 results to match requested sources (it has no native filter support)
+        allowed_sources = filter_dict.get("sources")
+        if allowed_sources:
+            sparse_chunks = [c for c in sparse_chunks if c.metadata.source in allowed_sources]
+        allowed_doc_types = filter_dict.get("doc_types")
+        if allowed_doc_types:
+            sparse_chunks = [c for c in sparse_chunks if c.metadata.doc_type in allowed_doc_types]
         timings["sparse_ms"] = (time.perf_counter() - t0) * 1000
 
         # 5. RRF fusion
@@ -109,12 +118,12 @@ class QueryPipeline:
             fused = entity_chunks + [c for c in fused if c.chunk_id not in seen_ids]
         timings["fusion_ms"] = (time.perf_counter() - t0) * 1000
 
-        # 6. Rerank (optional)
+        # 6. Rerank (optional) — uses resolved top_k_final
         t0 = time.perf_counter()
         if self.reranker and self.cfg.reranker_enabled:
-            final = self.reranker.rerank(rewritten, fused, top_k=self.cfg.top_k_final)
+            final = self.reranker.rerank(rewritten, fused, top_k=top_k_final)
         else:
-            final = fused[: self.cfg.top_k_final]
+            final = fused[:top_k_final]
         timings["rerank_ms"] = (time.perf_counter() - t0) * 1000
 
         # 7. Dedup and cap per-document
