@@ -101,11 +101,25 @@ class ATTACKLoader(BaseLoader):
     def _to_document(
         self,
         obj: dict,
-        attack_id: str,
-        bundle_name: str,
-        mitigation_map: dict[str, list[str]],
-        data_source_map: dict[str, list[str]],
+        attack_id_or_objects: str | list[dict] | None = None,
+        bundle_name: str = "enterprise",
+        mitigation_map: dict[str, list[str]] | None = None,
+        data_source_map: dict[str, list[str]] | None = None,
     ) -> Document:
+        if isinstance(attack_id_or_objects, list):
+            attack_id = _get_attack_id(obj)
+            mitigation_map = _build_mitigation_map(attack_id_or_objects)
+            data_source_map = _build_data_source_map(attack_id_or_objects)
+        elif isinstance(attack_id_or_objects, str):
+            attack_id = attack_id_or_objects
+        else:
+            attack_id = _get_attack_id(obj)
+
+        if mitigation_map is None:
+            mitigation_map = {}
+        if data_source_map is None:
+            data_source_map = {}
+
         ext_ref = obj.get("external_references", [])
         url = next(
             (r.get("url", "") for r in ext_ref if r.get("source_name") == "mitre-attack"),
@@ -122,11 +136,11 @@ class ATTACKLoader(BaseLoader):
         data_sources = obj.get("x_mitre_data_sources", [])
 
         # Look up mitigations and enriched data sources from relationship map
-        mitigations = mitigation_map.get(obj["id"], [])
-        enriched_sources = data_source_map.get(obj["id"], [])
+        mitigations = mitigation_map.get(obj.get("id", ""), [])
+        enriched_sources = data_source_map.get(obj.get("id", ""), [])
         all_data_sources = list(dict.fromkeys(data_sources + enriched_sources))  # deduplicate
 
-        title = f"{attack_id}: {name}" if attack_id else name
+        title = f"{attack_id} {name}" if attack_id else name
 
         # Build a rich, structured text body
         sections = [
