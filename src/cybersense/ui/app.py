@@ -235,10 +235,7 @@ if prompt := st.chat_input("Ask a cybersecurity question…"):
         })
         st.session_state.last_debug = debug_info
 
-    # Debug expander
-    if st.session_state.last_debug:
-        with st.expander("🔍 Debug", expanded=False):
-            st.json(st.session_state.last_debug)
+
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.divider()

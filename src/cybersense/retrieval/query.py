@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import time
 from typing import TYPE_CHECKING
 
@@ -66,25 +65,31 @@ class QueryPipeline:
         # Resolve top_k — prefer user-supplied value, fall back to config default
         top_k_final = (filters.top_k if filters and filters.top_k else None) or self.cfg.top_k_final
 
+        # Build filter dict once — used by Qdrant dense search, BM25 post-filter, and entity filter
+        filter_dict: dict = self._build_filter_dict(filters) or {}
+        allowed_sources: list[str] | None = filter_dict.get("sources")
+        allowed_doc_types: list[str] | None = filter_dict.get("doc_types")
+
         # 1. Query rewrite
         t0 = time.perf_counter()
         rewritten = await self._rewrite(query, history)
         timings["rewrite_ms"] = (time.perf_counter() - t0) * 1000
 
-        # 2. Entity extraction — short-circuit for exact IDs (permanent knowledge only)
+        # 2. Entity extraction — short-circuit for exact IDs (CVE/CWE/ATT&CK)
         t0 = time.perf_counter()
         entity_ids = extract_ids(rewritten)
         entity_chunks: list[RetrievedChunk] = []
         if entity_ids and hasattr(self.vector_store, "get_by_ids_filter"):
             entity_chunks = await self.vector_store.get_by_ids_filter(entity_ids, limit=20)
+            # Respect source/doc_type filter on entity chunks too
+            if allowed_sources:
+                entity_chunks = [c for c in entity_chunks if c.metadata.source in allowed_sources]
+            if allowed_doc_types:
+                entity_chunks = [c for c in entity_chunks if c.metadata.doc_type in allowed_doc_types]
         timings["entity_ms"] = (time.perf_counter() - t0) * 1000
 
-        # 3. Dense retrieval (with source/doc_type filter applied in Qdrant)
+        # 3. Dense retrieval — Qdrant applies source/doc_type filter natively
         t0 = time.perf_counter()
-        filter_dict = self._build_filter_dict(filters)
-        if filter_dict is None:
-            filter_dict = {}
-
         if hasattr(self.embedder, "encode_query"):
             query_vec = self.embedder.encode_query(rewritten)
         elif hasattr(self.embedder, "embed_query"):
@@ -93,46 +98,37 @@ class QueryPipeline:
             query_vec = self.embedder.encode([rewritten])[0]
 
         dense_chunks = await self.vector_store.search(
-            query_vec, limit=self.cfg.k_dense, filters=filter_dict
+            query_vec, limit=self.cfg.k_dense, filters=filter_dict or None
         )
         timings["dense_ms"] = (time.perf_counter() - t0) * 1000
 
-        # 4. Sparse (BM25) retrieval — apply source filter post-hoc
+        # 4. Sparse (BM25) retrieval — apply source/doc_type filter post-hoc
         t0 = time.perf_counter()
         sparse_chunks = self.bm25.search(rewritten, k=self.cfg.k_sparse)
-        # Filter BM25 results to match requested sources (it has no native filter support)
-        allowed_sources = filter_dict.get("sources")
         if allowed_sources:
             sparse_chunks = [c for c in sparse_chunks if c.metadata.source in allowed_sources]
-        allowed_doc_types = filter_dict.get("doc_types")
         if allowed_doc_types:
             sparse_chunks = [c for c in sparse_chunks if c.metadata.doc_type in allowed_doc_types]
         timings["sparse_ms"] = (time.perf_counter() - t0) * 1000
 
-        # 5. RRF fusion
+        # 5. RRF fusion — entity chunks guaranteed first
         t0 = time.perf_counter()
         fused = reciprocal_rank_fusion(dense_chunks, sparse_chunks, top_n=self.cfg.k_fused)
-        # Guarantee entity short-circuit chunks appear first
         if entity_chunks:
             seen_ids = {c.chunk_id for c in entity_chunks}
             fused = entity_chunks + [c for c in fused if c.chunk_id not in seen_ids]
         timings["fusion_ms"] = (time.perf_counter() - t0) * 1000
 
-        # 6. Rerank (optional) — uses resolved top_k_final
+        # 6. Dedup BEFORE top_k slice — ensures user gets exactly top_k unique results
+        fused = self._dedup_and_cap(fused, max_per_doc=self.cfg.max_chunks_per_doc)
+
+        # 7. Slice to top_k (or rerank if enabled)
         t0 = time.perf_counter()
         if self.reranker and self.cfg.reranker_enabled:
             final = self.reranker.rerank(rewritten, fused, top_k=top_k_final)
         else:
             final = fused[:top_k_final]
         timings["rerank_ms"] = (time.perf_counter() - t0) * 1000
-
-        # 7. Dedup and cap per-document
-        final = self._dedup_and_cap(final, max_per_doc=self.cfg.max_chunks_per_doc)
-
-        # 8. Relevance threshold check — disabled for broader retrieval
-        # Original: if final and final[0].score < self.cfg.relevance_threshold:
-        #     return [], rewritten, timings
-        # The threshold was too aggressive and caused false negatives.
 
         return final, rewritten, timings
 
