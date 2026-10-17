@@ -27,7 +27,7 @@ from cybersense.db.tables import Feedback, Message, Session
 from cybersense.generation.citations import build_citations
 from cybersense.generation.guardrails import check_input
 from cybersense.generation.llm import LLMClient
-from cybersense.generation.prompts import build_chat_prompt, no_context_response
+from cybersense.generation.prompts import build_chat_prompt, build_fallback_prompt, no_context_response
 from cybersense.models import (
     ChatMessage,
     ChatRequest,
@@ -105,7 +105,12 @@ async def chat(
 
     # Generation
     if not chunks:
-        answer_text = no_context_response()
+        # No KB context — fall back to LLM general knowledge with disclaimer
+        fallback_system, fallback_user = build_fallback_prompt(req.message, history)
+        if req.stream:
+            return _stream_response(llm, fallback_system, fallback_user, [], session.id, rewritten_query, latency_ms, db)
+        answer_raw = await llm.generate(fallback_user, system=fallback_system, max_tokens=settings.generation.max_tokens)
+        answer_text = answer_raw.strip()
         citations: list[Citation] = []
     else:
         system, user_msg = build_chat_prompt(req.message, chunks, history)

@@ -1,4 +1,4 @@
-"""MITRE ATT&CK loader — reads the STIX 2.1 JSON bundle from GitHub."""
+"""MITRE ATT&CK loader — Enterprise + ICS + Mobile STIX 2.1 bundles."""
 
 from __future__ import annotations
 
@@ -15,80 +15,144 @@ from cybersense.models import DocType, Document
 
 logger = get_logger(__name__)
 
-_ATTACK_URL = (
-    "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/"
-    "master/enterprise-attack/enterprise-attack.json"
-)
+_BUNDLES = {
+    "enterprise": (
+        "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/"
+        "master/enterprise-attack/enterprise-attack.json"
+    ),
+    "ics": (
+        "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/"
+        "master/ics-attack/ics-attack.json"
+    ),
+    "mobile": (
+        "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/"
+        "master/mobile-attack/mobile-attack.json"
+    ),
+}
 
 
 class ATTACKLoader(BaseLoader):
     source_name = "attack"
 
-    def __init__(self, cache_dir: Path | None = None) -> None:
+    def __init__(self, cache_dir: Path | None = None, bundles: list[str] | None = None) -> None:
         self.cache_dir = cache_dir
+        # Default: load all three bundles for maximum coverage
+        self.bundles = bundles or list(_BUNDLES.keys())
 
     def load(self, **kwargs) -> Iterator[Document]:
-        """Load ATT&CK Enterprise techniques from STIX JSON."""
-        stix = self._fetch_or_cache()
-        objects = stix.get("objects", [])
-        techniques = [o for o in objects if o.get("type") == "attack-pattern"]
-        logger.info("ATT&CK: loaded techniques", extra={"count": len(techniques)})
+        """Load ATT&CK techniques from Enterprise + ICS + Mobile STIX bundles."""
+        seen_ids: set[str] = set()  # deduplicate across bundles
 
-        # Build lookup for kill-chain phase names
-        for obj in techniques:
+        for bundle_name in self.bundles:
+            url = _BUNDLES.get(bundle_name)
+            if not url:
+                logger.warning("ATT&CK: unknown bundle", extra={"bundle": bundle_name})
+                continue
             try:
-                yield self._to_document(obj, objects)
+                stix = self._fetch_or_cache(bundle_name, url)
             except Exception as exc:
-                logger.warning(
-                    "ATT&CK: skipping object",
-                    extra={"id": obj.get("id"), "error": str(exc)},
-                )
+                logger.warning("ATT&CK: failed to load bundle", extra={"bundle": bundle_name, "error": str(exc)})
+                continue
 
-    def _fetch_or_cache(self) -> dict:
+            objects = stix.get("objects", [])
+            techniques = [o for o in objects if o.get("type") == "attack-pattern" and not o.get("revoked")]
+            # Build lookup maps from this bundle
+            mitigation_map = _build_mitigation_map(objects)
+            data_source_map = _build_data_source_map(objects)
+
+            logger.info(
+                "ATT&CK: loaded techniques",
+                extra={"bundle": bundle_name, "count": len(techniques)},
+            )
+
+            for obj in techniques:
+                attack_id = _get_attack_id(obj)
+                if attack_id in seen_ids:
+                    continue
+                seen_ids.add(attack_id)
+                try:
+                    yield self._to_document(obj, attack_id, bundle_name, mitigation_map, data_source_map)
+                except Exception as exc:
+                    logger.warning(
+                        "ATT&CK: skipping object",
+                        extra={"id": obj.get("id"), "error": str(exc)},
+                    )
+
+    def _fetch_or_cache(self, bundle_name: str, url: str) -> dict:
         if self.cache_dir:
-            cache_file = self.cache_dir / "enterprise-attack.json"
+            cache_file = self.cache_dir / f"{bundle_name}-attack.json"
             if cache_file.exists():
                 logger.info("ATT&CK: loading from cache", extra={"path": str(cache_file)})
                 return json.loads(cache_file.read_text(encoding="utf-8"))
 
-        logger.info("ATT&CK: downloading STIX bundle", extra={"url": _ATTACK_URL})
-        resp = requests.get(_ATTACK_URL, timeout=120)
+        logger.info("ATT&CK: downloading STIX bundle", extra={"url": url})
+        resp = requests.get(url, timeout=180)
         resp.raise_for_status()
         data = resp.json()
 
         if self.cache_dir:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_file = self.cache_dir / "enterprise-attack.json"
+            cache_file = self.cache_dir / f"{bundle_name}-attack.json"
             cache_file.write_text(json.dumps(data), encoding="utf-8")
             logger.info("ATT&CK: cached", extra={"path": str(cache_file)})
 
         return data
 
-    def _to_document(self, obj: dict, all_objects: list[dict]) -> Document:
+    def _to_document(
+        self,
+        obj: dict,
+        attack_id: str,
+        bundle_name: str,
+        mitigation_map: dict[str, list[str]],
+        data_source_map: dict[str, list[str]],
+    ) -> Document:
         ext_ref = obj.get("external_references", [])
-        attack_id = next(
-            (r.get("external_id", "") for r in ext_ref if r.get("source_name") == "mitre-attack"),
-            "",
-        )
         url = next(
             (r.get("url", "") for r in ext_ref if r.get("source_name") == "mitre-attack"),
             "",
         )
         name = obj.get("name", "")
         description = obj.get("description", "")
-        phases = [p.get("phase_name", "") for p in obj.get("kill_chain_phases", [])]
+        phases = [p.get("phase_name", "").replace("-", " ") for p in obj.get("kill_chain_phases", [])]
         platforms = obj.get("x_mitre_platforms", [])
         detection = obj.get("x_mitre_detection", "")
         is_subtechnique = obj.get("x_mitre_is_subtechnique", False)
+        permissions = obj.get("x_mitre_permissions_required", [])
+        defenses_bypassed = obj.get("x_mitre_defense_bypassed", [])
+        data_sources = obj.get("x_mitre_data_sources", [])
 
-        title = f"{attack_id} {name}" if attack_id else name
-        text = (
-            f"{title}\n"
-            f"Tactic: {', '.join(phases)}\n"
-            f"Platforms: {', '.join(platforms)}\n\n"
-            f"Description:\n{description}\n\n"
-            f"Detection:\n{detection}"
-        )
+        # Look up mitigations and enriched data sources from relationship map
+        mitigations = mitigation_map.get(obj["id"], [])
+        enriched_sources = data_source_map.get(obj["id"], [])
+        all_data_sources = list(dict.fromkeys(data_sources + enriched_sources))  # deduplicate
+
+        title = f"{attack_id}: {name}" if attack_id else name
+
+        # Build a rich, structured text body
+        sections = [
+            f"{title}",
+            f"Domain: {bundle_name.replace('_', ' ').title()} ATT&CK",
+            f"Tactic(s): {', '.join(phases) if phases else 'N/A'}",
+            f"Platforms: {', '.join(platforms) if platforms else 'N/A'}",
+            f"Sub-technique: {'Yes' if is_subtechnique else 'No'}",
+        ]
+        if permissions:
+            sections.append(f"Permissions Required: {', '.join(permissions)}")
+        if defenses_bypassed:
+            sections.append(f"Defenses Bypassed: {', '.join(defenses_bypassed)}")
+
+        sections.append(f"\nDescription:\n{description}")
+
+        if detection:
+            sections.append(f"\nDetection:\n{detection}")
+
+        if all_data_sources:
+            sections.append(f"\nData Sources: {', '.join(all_data_sources)}")
+
+        if mitigations:
+            sections.append(f"\nMitigations:\n" + "\n".join(f"- {m}" for m in mitigations))
+
+        text = "\n".join(sections)
         content_hash = hashlib.sha256(text.encode()).hexdigest()
 
         return Document(
@@ -103,7 +167,59 @@ class ATTACKLoader(BaseLoader):
                 "tactics": phases,
                 "platforms": platforms,
                 "is_subtechnique": is_subtechnique,
+                "bundle": bundle_name,
                 "modified_date": obj.get("modified"),
             },
             content_hash=content_hash,
         )
+
+
+# ── STIX helper functions ─────────────────────────────────────────────────────
+
+def _get_attack_id(obj: dict) -> str:
+    """Extract the ATT&CK ID (e.g. T1059) from external references."""
+    for ref in obj.get("external_references", []):
+        if ref.get("source_name") == "mitre-attack":
+            return ref.get("external_id", "")
+    return ""
+
+
+def _build_mitigation_map(objects: list[dict]) -> dict[str, list[str]]:
+    """Return {technique_stix_id: [mitigation_name, ...]} from STIX relationships."""
+    # Index course-of-action objects by id
+    mitigations: dict[str, str] = {
+        o["id"]: o.get("name", "")
+        for o in objects
+        if o.get("type") == "course-of-action"
+    }
+    result: dict[str, list[str]] = {}
+    for rel in objects:
+        if (
+            rel.get("type") == "relationship"
+            and rel.get("relationship_type") == "mitigates"
+            and rel.get("source_ref", "") in mitigations
+        ):
+            target = rel["target_ref"]
+            name = mitigations[rel["source_ref"]]
+            result.setdefault(target, []).append(name)
+    return result
+
+
+def _build_data_source_map(objects: list[dict]) -> dict[str, list[str]]:
+    """Return {technique_stix_id: [data_source_name, ...]} from STIX x-mitre-data-source objects."""
+    ds_names: dict[str, str] = {
+        o["id"]: o.get("name", "")
+        for o in objects
+        if o.get("type") == "x-mitre-data-source"
+    }
+    result: dict[str, list[str]] = {}
+    for rel in objects:
+        if (
+            rel.get("type") == "relationship"
+            and rel.get("relationship_type") == "detects"
+            and rel.get("source_ref", "") in ds_names
+        ):
+            target = rel["target_ref"]
+            name = ds_names[rel["source_ref"]]
+            result.setdefault(target, []).append(name)
+    return result
