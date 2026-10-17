@@ -46,10 +46,6 @@ async def upload_document(
         tmp.write(content)
         tmp_path = Path(tmp.name)
 
-    # Import session cache for temporary processing
-    from cybersense.api.deps import get_session_cache
-    session_cache = get_session_cache()
-
     try:
         from cybersense.ingestion.pdf import PDFLoader
         from cybersense.ingestion.markdown import MarkdownLoader
@@ -57,6 +53,10 @@ async def upload_document(
 
         clean_title = Path(filename).stem.replace("-", " ").replace("_", " ").title()
         doc_id = f"upload:{hashlib.sha256(filename.encode()).hexdigest()[:12]}"
+
+        # Import session cache for temporary processing
+        from cybersense.api.deps import get_session_cache
+        session_cache = get_session_cache()
 
         if suffix == ".pdf":
             loader = PDFLoader(source_label="upload", doc_type=DocType.upload)

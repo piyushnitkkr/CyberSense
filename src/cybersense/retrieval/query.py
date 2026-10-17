@@ -22,8 +22,9 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _QUERY_REWRITE_PROMPT = """\
-Given the following conversation history and a follow-up question, \
+Given the following conversation history and a follow-up question in the cybersecurity domain, \
 rewrite the question into a standalone query that captures all context.
+Preserve important technical terms, acronyms, and domain-specific language.
 Respond with ONLY the rewritten query (max 60 tokens). Do not explain.
 
 History:

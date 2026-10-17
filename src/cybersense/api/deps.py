@@ -6,14 +6,14 @@ import functools
 
 from fastapi import Depends, Header, HTTPException, status
 
-from cybersense.config import Settings, get_settings
-from cybersense.generation.guardrails import check_input
-from cybersense.generation.llm import LLMClient, build_llm_client
-from cybersense.retrieval.embeddings import EmbeddingModel
-from cybersense.retrieval.reranker import Reranker
-from cybersense.retrieval.session_cache import SessionCache
-from cybersense.retrieval.sparse import BM25Index
-from cybersense.retrieval.vector_store import VectorStore
+from src.cybersense.config import Settings, get_settings
+from src.cybersense.generation.guardrails import check_input
+from src.cybersense.generation.llm import LLMClient, build_llm_client
+from src.cybersense.retrieval.embeddings import EmbeddingModel
+from src.cybersense.retrieval.reranker import Reranker
+from src.cybersense.retrieval.session_cache import SessionCache
+from src.cybersense.retrieval.sparse import BM25Index
+from src.cybersense.retrieval.vector_store import VectorStore
 
 # ── Singletons (module-level cache) ──────────────────────────────────────────
 
@@ -40,6 +40,20 @@ def _get_llm(provider: str) -> LLMClient:
 
 # BM25 is mutable (rebuilt on ingest) — not cached with lru_cache
 _bm25_index = BM25Index()
+
+# SessionCache singleton
+_session_cache: SessionCache | None = None
+
+
+def get_session_cache(
+    vector_store: VectorStore = Depends(get_vector_store),
+    embedder: EmbeddingModel = Depends(get_embedder),
+) -> SessionCache:
+    """Return singleton SessionCache instance."""
+    global _session_cache
+    if _session_cache is None:
+        _session_cache = SessionCache(vector_store, embedder)
+    return _session_cache
 
 
 def get_bm25() -> BM25Index:
