@@ -69,6 +69,8 @@ class VectorStore:
         vectors: list[list[float]],
     ) -> None:
         """Remove old chunks for doc_id then insert new ones."""
+        await self.ensure_collection()
+
         # Delete existing chunks for this document
         await self.client.delete(
             collection_name=self.collection,
@@ -184,7 +186,7 @@ class VectorStore:
             conditions.append(
                 models.FieldCondition(key="session_id", match=models.MatchValue(value=session_id))
             )
-        return models.Filter(must=conditions) if conditions else models.Filter()
+        return models.Filter(must=conditions) if conditions else None
 
     @staticmethod
     def _chunk_uuid(chunk_id: str) -> str:

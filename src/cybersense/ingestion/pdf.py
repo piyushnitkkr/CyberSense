@@ -77,10 +77,6 @@ class PDFLoader(BaseLoader):
                 processed_chars += len(text)
                 processed_pages += 1
 
-                # Early break if we have enough content
-                if processed_pages >= 5 and processed_chars > 10000:  # Reasonable minimum
-                    break
-
         finally:
             doc.close()
             # Explicit cleanup

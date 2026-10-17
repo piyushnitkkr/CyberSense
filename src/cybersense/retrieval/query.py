@@ -82,16 +82,6 @@ class QueryPipeline:
         if filter_dict is None:
             filter_dict = {}
 
-        # Add session filter if session_id is in history
-        session_id = None
-        for msg in history:
-            if hasattr(msg, 'role') and hasattr(msg, 'content'):
-                # If we have session-aware messages, extract session_id
-                pass
-
-        # Remove session_id from filter_dict to search permanent knowledge only
-        if "session_id" in filter_dict:
-            del filter_dict["session_id"]
 
         if hasattr(self.embedder, "encode_query"):
             query_vec = self.embedder.encode_query(rewritten)

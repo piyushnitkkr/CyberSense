@@ -50,7 +50,9 @@ async def rebuild_bm25_index(
                 with_payload=True,
                 with_vectors=False,
             )
-        except Exception:
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("BM25 rebuild: scroll failed, stopping early", extra={"error": str(exc)})
             break
 
         for point in results:
@@ -59,7 +61,17 @@ async def rebuild_bm25_index(
             texts.append(text)
             chunk_ids.append(str(point.id))
             meta_dict = {k: v for k, v in payload.items() if k != "text"}
-            metadatas.append(ChunkMetadata(**meta_dict))
+            try:
+                metadatas.append(ChunkMetadata(**meta_dict))
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "BM25 rebuild: skipping point with invalid payload",
+                    extra={"point_id": str(point.id), "error": str(exc)},
+                )
+                # Pop the text/chunk_id we just appended to keep lists in sync
+                texts.pop()
+                chunk_ids.pop()
 
         if next_offset is None or not results:
             break

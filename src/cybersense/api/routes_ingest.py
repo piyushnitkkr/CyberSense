@@ -52,7 +52,8 @@ async def upload_document(
         from cybersense.ingestion.html import HTMLLoader
 
         clean_title = Path(filename).stem.replace("-", " ").replace("_", " ").title()
-        doc_id = f"upload:{hashlib.sha256(filename.encode()).hexdigest()[:12]}"
+        # Hash the *content* so two files with the same name don't collide
+        doc_id = f"upload:{hashlib.sha256(content).hexdigest()[:12]}"
 
         if suffix == ".pdf":
             loader = PDFLoader(source_label="upload", doc_type=DocType.upload)
