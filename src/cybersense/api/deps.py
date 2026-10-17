@@ -41,20 +41,6 @@ def _get_llm(provider: str) -> LLMClient:
 # BM25 is mutable (rebuilt on ingest) — not cached with lru_cache
 _bm25_index = BM25Index()
 
-# SessionCache singleton
-_session_cache: SessionCache | None = None
-
-
-def get_session_cache(
-    vector_store: VectorStore = Depends(get_vector_store),
-    embedder: EmbeddingModel = Depends(get_embedder),
-) -> SessionCache:
-    """Return singleton SessionCache instance."""
-    global _session_cache
-    if _session_cache is None:
-        _session_cache = SessionCache(vector_store, embedder)
-    return _session_cache
-
 
 def get_bm25() -> BM25Index:
     return _bm25_index
