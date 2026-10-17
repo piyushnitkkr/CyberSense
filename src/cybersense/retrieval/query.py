@@ -130,10 +130,10 @@ class QueryPipeline:
         # 7. Dedup and cap per-document
         final = self._dedup_and_cap(final, max_per_doc=self.cfg.max_chunks_per_doc)
 
-        # 8. Relevance threshold check
-        if final and final[0].score < self.cfg.relevance_threshold:
-            logger.info("QueryPipeline: below relevance threshold, returning empty context")
-            return [], rewritten, timings
+        # 8. Relevance threshold check — disabled for broader retrieval
+        # Original: if final and final[0].score < self.cfg.relevance_threshold:
+        #     return [], rewritten, timings
+        # The threshold was too aggressive and caused false negatives.
 
         return final, rewritten, timings
 
