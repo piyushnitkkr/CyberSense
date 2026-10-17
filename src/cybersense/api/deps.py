@@ -7,7 +7,6 @@ import functools
 from fastapi import Depends, Header, HTTPException, status
 
 from cybersense.config import Settings, get_settings
-from cybersense.generation.guardrails import check_input
 from cybersense.generation.llm import LLMClient, build_llm_client
 from cybersense.retrieval.embeddings import EmbeddingModel
 from cybersense.retrieval.reranker import Reranker

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import gc
 import hashlib
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -12,26 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from cybersense.config import Settings
 from cybersense.db.tables import DocumentRecord, IngestionRun
-from cybersense.ingestion.chunking import (
-    ChunkingConfig,
-    chunk_prose_document,
-    chunk_structured_record,
-)
+from cybersense.ingestion.enrich import extract_ids
 from cybersense.logging import get_logger
-from cybersense.models import Chunk, ChunkMetadata, DocType, Document
+from cybersense.models import Chunk, ChunkMetadata, Document
 
 if TYPE_CHECKING:
     from cybersense.retrieval.embeddings import EmbeddingModel
     from cybersense.retrieval.vector_store import VectorStore
 
 logger = get_logger(__name__)
-
-_STRUCTURED_TYPES = {
-    DocType.technique,
-    DocType.weakness,
-    DocType.cve,
-    DocType.kev,
-}
 
 
 class IngestionPipeline:
@@ -47,12 +36,6 @@ class IngestionPipeline:
         self.session = session
         self.vector_store = vector_store
         self.embedder = embedder
-        self.chunk_cfg = ChunkingConfig(
-            target_tokens=settings.chunking.target_tokens,
-            max_tokens=settings.chunking.max_tokens,
-            min_tokens=settings.chunking.min_tokens,
-            overlap_tokens=settings.chunking.overlap_tokens,
-        )
 
     async def run(self, source: str, documents) -> IngestionRun:
         """Process an iterable of Documents; returns the IngestionRun record."""
@@ -157,7 +140,6 @@ class IngestionPipeline:
                 batch = texts[i:i + 2]
                 batch_vectors = self.embedder.encode(batch)
                 vectors.extend(batch_vectors)
-                import gc
                 gc.collect()
         else:
             vectors = []
@@ -195,8 +177,7 @@ class IngestionPipeline:
         return action
 
     def _ultra_light_chunk(self, doc: Document) -> list[Chunk]:
-        """Extremely lightweight chunking that uses minimal memory."""
-        from cybersense.ingestion.enrich import extract_ids
+        """Lightweight chunking: splits text into capped-size chunks."""
 
         text = doc.text
         if not text.strip():
@@ -280,47 +261,3 @@ class IngestionPipeline:
 
         return chunks
 
-    def _chunk(self, doc: Document) -> list[Chunk]:
-        if doc.doc_type in _STRUCTURED_TYPES:
-            return chunk_structured_record(doc, self.chunk_cfg)
-        return chunk_prose_document(doc, self.chunk_cfg)
-
-    def _create_simple_chunks(self, doc: Document, text: str) -> list[Chunk]:
-        """Simplified chunking fallback for large documents when memory is limited."""
-        from cybersense.ingestion.enrich import extract_ids
-
-        # Create just a few large chunks instead of many small ones
-        chunk_size = 50_000  # ~50KB per chunk
-        chunks = []
-        idx = 0
-
-        for i in range(0, len(text), chunk_size):
-            chunk_text = text[i : i + chunk_size]
-            meta = ChunkMetadata(
-                source=doc.source,
-                doc_id=doc.doc_id,
-                doc_type=doc.doc_type.value,
-                title=doc.title,
-                section_path=doc.metadata.get("section_path", ""),
-                url=doc.url,
-                page=doc.metadata.get("page"),
-                published_date=doc.metadata.get("published_date"),
-                modified_date=doc.metadata.get("modified_date"),
-                ids=extract_ids(chunk_text),
-                severity=doc.metadata.get("severity"),
-                cvss=doc.metadata.get("cvss"),
-                content_hash=doc.content_hash,
-            )
-            chunks.append(Chunk(
-                chunk_id=f"{doc.doc_id}:{idx}",
-                doc_id=doc.doc_id,
-                text=chunk_text,
-                index=idx,
-                metadata=meta,
-            ))
-            idx += 1
-            # Safety: cap at 10 chunks in fallback mode
-            if idx >= 10:
-                break
-
-        return chunks

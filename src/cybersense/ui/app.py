@@ -62,8 +62,6 @@ if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "last_debug" not in st.session_state:
-    st.session_state.last_debug = {}
 if "api_base" not in st.session_state:
     st.session_state.api_base = _get_default_api_base()
 
@@ -200,10 +198,6 @@ if prompt := st.chat_input("Ask a cybersecurity question…"):
                 full_answer = data.get("answer", "")
                 citations = data.get("citations", [])
                 message_id = data.get("message_id", "")
-                debug_info = {
-                    "rewritten_query": data.get("rewritten_query"),
-                    "latency_ms": data.get("latency_ms", {}),
-                }
                 placeholder.markdown(full_answer)
                 _render_citations(citations)
             else:
@@ -233,7 +227,6 @@ if prompt := st.chat_input("Ask a cybersecurity question…"):
             "citations": citations,
             "message_id": message_id,
         })
-        st.session_state.last_debug = debug_info
 
 
 
