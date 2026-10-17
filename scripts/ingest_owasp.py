@@ -2,27 +2,22 @@
 """Ingest OWASP Top 10 2025 into Qdrant."""
 
 import asyncio
-import json
-from pathlib import Path
 import sys
-import requests
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from cybersense.config import get_settings
+from cybersense.db.session import _SessionFactory as SessionFactory
+from cybersense.ingestion.pipeline import IngestionPipeline
+from cybersense.models import DocType, Document
 from cybersense.retrieval.embeddings import EmbeddingModel
 from cybersense.retrieval.vector_store import VectorStore
-from cybersense.ingestion.pipeline import IngestionPipeline
-from cybersense.models import Document, DocType
-from cybersense.db.session import _SessionFactory as SessionFactory
 
 
 async def main():
     settings = get_settings()
     print("[INFO] Ingesting OWASP Top 10 2025...")
-
-    # Download OWASP Top 10 2025 from GitHub
-    base_url = "https://raw.githubusercontent.com/OWASP/Top10/master/2025/"
 
     embedder = EmbeddingModel(
         model_name=settings.embedding.model,
@@ -42,8 +37,6 @@ async def main():
     owasp_items = []
     for i in range(1, 11):
         try:
-            # Try fetching markdown files
-            url = f"{base_url}A{i:02d}_*.md"  # Pattern varies
             # Fallback: construct known URLs
             item_name = f"A{i:02d}"
             print(f"[INFO] Loading OWASP {item_name}...")
@@ -66,14 +59,14 @@ For detailed information, refer to: https://owasp.org/www-project-top-ten/
                 doc_id=f"owasp:top10:2025:{item_name}",
                 source="owasp",
                 title=f"OWASP Top 10:2025 - {item_name}",
-                url=f"https://owasp.org/www-project-top-ten/",
+                url="https://owasp.org/www-project-top-ten/",
                 doc_type=DocType.standard,
                 text=text,
                 metadata={
                     "version": "2025",
                     "category": item_name,
                     "rank": i,
-                }
+                },
             )
             owasp_items.append(doc)
         except Exception as e:

@@ -21,6 +21,7 @@ class Reranker:
         if self._model is None:
             try:
                 from sentence_transformers import CrossEncoder
+
                 logger.info("Loading reranker model", extra={"model": self.model_name})
                 self._model = CrossEncoder(self.model_name, device=self.device)
             except ImportError:
@@ -28,7 +29,9 @@ class Reranker:
                 self._model = False
         return self._model
 
-    def rerank(self, query: str, chunks: list[RetrievedChunk], top_k: int = 8) -> list[RetrievedChunk]:
+    def rerank(
+        self, query: str, chunks: list[RetrievedChunk], top_k: int = 8
+    ) -> list[RetrievedChunk]:
         """Score each chunk against the query and return top_k."""
         if not chunks:
             return []

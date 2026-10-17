@@ -2,17 +2,17 @@
 """Ingest MITRE CWE (Common Weakness Enumeration) into Qdrant."""
 
 import asyncio
-from pathlib import Path
 import sys
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from cybersense.config import get_settings
-from cybersense.retrieval.embeddings import EmbeddingModel
-from cybersense.retrieval.vector_store import VectorStore
+from cybersense.db.session import _SessionFactory as SessionFactory
 from cybersense.ingestion.cwe import CWELoader
 from cybersense.ingestion.pipeline import IngestionPipeline
-from cybersense.db.session import _SessionFactory as SessionFactory
+from cybersense.retrieval.embeddings import EmbeddingModel
+from cybersense.retrieval.vector_store import VectorStore
 
 
 async def main():

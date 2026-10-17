@@ -2,23 +2,23 @@
 """Ingest MITRE ATT&CK Enterprise techniques into Qdrant."""
 
 import asyncio
-from pathlib import Path
 import sys
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from cybersense.config import get_settings
-from cybersense.retrieval.embeddings import EmbeddingModel
-from cybersense.retrieval.vector_store import VectorStore
+from cybersense.db.session import _SessionFactory as SessionFactory
 from cybersense.ingestion.attack import ATTACKLoader
 from cybersense.ingestion.pipeline import IngestionPipeline
-from cybersense.db.session import _SessionFactory as SessionFactory
+from cybersense.retrieval.embeddings import EmbeddingModel
+from cybersense.retrieval.vector_store import VectorStore
 
 
 async def main():
     settings = get_settings()
-    print(f"[INFO] Ingesting MITRE ATT&CK from GitHub...")
-    print(f"  URL: https://github.com/mitre-attack/attack-stix-data")
+    print("[INFO] Ingesting MITRE ATT&CK from GitHub...")
+    print("  URL: https://github.com/mitre-attack/attack-stix-data")
 
     # Initialize services
     embedder = EmbeddingModel(
@@ -49,7 +49,7 @@ async def main():
         pipeline = IngestionPipeline(session, vector_store, embedder, settings)
         result = await pipeline.run("attack", iter(docs))
 
-    print(f"[OK] Ingestion complete:")
+    print("[OK] Ingestion complete:")
     print(f"  Added: {result.added}")
     print(f"  Updated: {result.updated}")
     print(f"  Skipped: {result.skipped}")
@@ -58,6 +58,7 @@ async def main():
     # Rebuild BM25 index
     print("\n[INFO] Rebuilding BM25 index...")
     from cybersense.api.deps import get_bm25
+
     bm25 = get_bm25()
 
     texts = []
@@ -84,6 +85,7 @@ async def main():
             texts.append(text)
             chunk_ids.append(str(point.id))
             from cybersense.models import ChunkMetadata
+
             meta_dict = {k: v for k, v in payload.items() if k != "text"}
             metadatas.append(ChunkMetadata(**meta_dict))
 

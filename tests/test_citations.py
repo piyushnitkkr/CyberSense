@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from cybersense.generation.citations import build_citations, extract_citation_numbers
 from cybersense.models import ChunkMetadata, RetrievedChunk
 

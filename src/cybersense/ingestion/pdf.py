@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from cybersense.ingestion.base import BaseLoader
 from cybersense.logging import get_logger
@@ -20,7 +20,9 @@ class PDFLoader(BaseLoader):
         self.source_label = source_label
         self.doc_type = doc_type
 
-    def load(self, paths: list[Path] | None = None, directory: Path | None = None, **kwargs) -> Iterator[Document]:
+    def load(
+        self, paths: list[Path] | None = None, directory: Path | None = None, **kwargs
+    ) -> Iterator[Document]:
         try:
             import fitz  # PyMuPDF
         except ImportError:
@@ -66,7 +68,9 @@ class PDFLoader(BaseLoader):
                 # Limit text per page to prevent memory spikes
                 if len(text) > max_chars_per_page:
                     text = text[:max_chars_per_page] + "... [truncated]"
-                    logger.info(f"PDF: page {page_num} text truncated to {max_chars_per_page} chars")
+                    logger.info(
+                        f"PDF: page {page_num} text truncated to {max_chars_per_page} chars"
+                    )
 
                 # Check if adding this page would exceed total limit
                 if processed_chars + len(text) > max_total_chars:
@@ -82,6 +86,7 @@ class PDFLoader(BaseLoader):
             # Explicit cleanup
             del doc
             import gc
+
             gc.collect()
 
         # Join text with minimal overhead

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -89,7 +88,9 @@ class Settings(BaseSettings):
 
     app_name: str = Field(default="CyberSense", alias="APP_NAME")
     app_env: str = Field(default="development", alias="APP_ENV")
-    database_url: str = Field(default="sqlite+aiosqlite:///data/cybersense.db", alias="DATABASE_URL")
+    database_url: str = Field(
+        default="sqlite+aiosqlite:///data/cybersense.db", alias="DATABASE_URL"
+    )
 
     # Secrets (from .env only)
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
@@ -112,7 +113,7 @@ class Settings(BaseSettings):
     ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
 
     @classmethod
-    def from_yaml_and_env(cls) -> "Settings":
+    def from_yaml_and_env(cls) -> Settings:
         raw = _load_yaml()
         kwargs: dict[str, Any] = {}
         if "embedding" in raw:

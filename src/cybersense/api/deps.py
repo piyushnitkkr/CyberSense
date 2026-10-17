@@ -15,6 +15,7 @@ from cybersense.retrieval.vector_store import VectorStore
 
 # ── Singletons (module-level cache) ──────────────────────────────────────────
 
+
 @functools.lru_cache(maxsize=1)
 def _get_embedder(model: str, device: str, batch_size: int) -> EmbeddingModel:
     return EmbeddingModel(model_name=model, device=device, batch_size=batch_size)

@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
     logger.info("CyberSense API starting up")
     await init_db()
     import os
+
     # Skip expensive BM25 preload on cloud/production to avoid OOM (512 MB free tier).
     # Dense vector search via Qdrant still works. BM25 can be rebuilt on-demand via
     # POST /api/v1/admin/rebuild-index if extra RAM becomes available.
@@ -35,11 +36,14 @@ async def lifespan(app: FastAPI):
         try:
             from cybersense.api.deps import get_bm25, get_vector_store
             from cybersense.api.routes_admin import rebuild_bm25_index
+
             vs = get_vector_store(settings)
             bm25 = get_bm25()
             await rebuild_bm25_index(vs, bm25)
         except Exception as exc:
-            logger.warning("Could not pre-populate BM25 index on startup", extra={"error": str(exc)})
+            logger.warning(
+                "Could not pre-populate BM25 index on startup", extra={"error": str(exc)}
+            )
 
     yield
     logger.info("CyberSense API shutting down")
@@ -63,12 +67,14 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     import traceback
+
     tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
     logger.error("Unhandled exception: %s\n%s", exc, tb)
     return JSONResponse(
         status_code=500,
         content={"detail": f"{type(exc).__name__}: {exc}"},
     )
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -92,6 +98,7 @@ async def test_groq():
     key_preview = f"{key[:6]}...{key[-4:]}" if len(key) > 10 else f"len={len(key)}"
     try:
         from cybersense.generation.llm import GroqClient
+
         client = GroqClient(api_key=key, model=settings.generation.model)
         answer = await client.generate("Say 'Groq is operational!' in 4 words.")
         return {
@@ -103,6 +110,7 @@ async def test_groq():
         }
     except Exception as exc:
         import traceback
+
         return {
             "status": "error",
             "provider": settings.generation.provider,
@@ -116,7 +124,9 @@ async def test_groq():
 async def debug_embed():
     """Test embedding model loading and query embedding in isolation."""
     import time
+
     from cybersense.api.deps import get_embedder
+
     settings = get_settings()
     try:
         t0 = time.perf_counter()
@@ -136,7 +146,11 @@ async def debug_embed():
 
         return {
             "status": "ok",
-            "backend": "fastembed" if getattr(embedder, "_use_fastembed", None) else "sentence-transformers",
+            "backend": (
+                "fastembed"
+                if getattr(embedder, "_use_fastembed", None)
+                else "sentence-transformers"
+            ),
             "dimension": len(vec),
             "sample": vec[:3],
             "latency_ms": round(elapsed_ms, 2),
@@ -144,6 +158,7 @@ async def debug_embed():
         }
     except Exception as exc:
         import traceback
+
         return {
             "status": "error",
             "error": f"{type(exc).__name__}: {exc}",
@@ -155,6 +170,7 @@ async def debug_embed():
 async def debug_system():
     """Inspect memory and system state on the server."""
     import os
+
     info: dict = {"pid": os.getpid(), "env": os.environ.get("APP_ENV", "unknown")}
     try:
         with open("/proc/self/status") as f:
@@ -196,8 +212,10 @@ async def health() -> dict:
 
     try:
         from qdrant_client import AsyncQdrantClient
+
         if settings.qdrant_url.startswith("http://") or settings.qdrant_url.startswith("https://"):
             import re
+
             url = settings.qdrant_url
             if "cloud.qdrant.io" in url:
                 url = re.sub(r":6333/?$", "", url)

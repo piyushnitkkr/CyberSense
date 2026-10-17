@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from cybersense.ingestion.base import BaseLoader
 from cybersense.logging import get_logger
@@ -22,13 +22,17 @@ class MarkdownLoader(BaseLoader):
         self.source_label = source_label
         self.doc_type = doc_type
 
-    def load(self, paths: list[Path] | None = None, directory: Path | None = None, **kwargs) -> Iterator[Document]:
+    def load(
+        self, paths: list[Path] | None = None, directory: Path | None = None, **kwargs
+    ) -> Iterator[Document]:
         files: list[Path] = list(paths or [])
         if directory and directory.is_dir():
             files.extend(sorted(directory.rglob("*.md")))
             files.extend(sorted(directory.rglob("*.markdown")))
 
-        logger.info("Markdown: loading files", extra={"source": self.source_label, "count": len(files)})
+        logger.info(
+            "Markdown: loading files", extra={"source": self.source_label, "count": len(files)}
+        )
 
         for filepath in files:
             try:

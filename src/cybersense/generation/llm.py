@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 
 class LLMClient(ABC):
     """Provider-agnostic LLM interface."""
 
     @abstractmethod
-    async def generate(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> str:
+    async def generate(
+        self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1
+    ) -> str:
         """Return the complete generated text."""
         ...
 
     @abstractmethod
-    async def stream(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> AsyncIterator[str]:
+    async def stream(
+        self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1
+    ) -> AsyncIterator[str]:
         """Yield text tokens as they are generated."""
         ...
 
@@ -47,6 +51,7 @@ class GroqClient(LLMClient):
 
     def __init__(self, api_key: str = "", model: str = "llama-3.1-8b-instant") -> None:
         import os
+
         key = api_key or os.environ.get("GROQ_API_KEY", "")
         if not key:
             raise ValueError(
@@ -54,11 +59,15 @@ class GroqClient(LLMClient):
                 "or pass api_key directly (get a free key at https://console.groq.com)."
             )
         from groq import AsyncGroq
+
         self._client = AsyncGroq(api_key=key)
         self.model = model
 
-    async def _try_create(self, messages: list[dict], max_tokens: int, temperature: float, stream: bool = False):
+    async def _try_create(
+        self, messages: list[dict], max_tokens: int, temperature: float, stream: bool = False
+    ):
         import asyncio
+
         models_to_try = [self.model] + [m for m in _GROQ_FALLBACK_MODELS if m != self.model]
         last_exc: Exception | None = None
         for i, m in enumerate(models_to_try):
@@ -75,7 +84,11 @@ class GroqClient(LLMClient):
             except Exception as e:
                 err_str = str(e).lower()
                 # Model doesn't exist for this key → try next
-                if "model_not_found" in err_str or "does not exist" in err_str or "access" in err_str:
+                if (
+                    "model_not_found" in err_str
+                    or "does not exist" in err_str
+                    or "access" in err_str
+                ):
                     last_exc = e
                     continue
                 # Overloaded / rate-limited → brief backoff then try next model
@@ -88,22 +101,30 @@ class GroqClient(LLMClient):
         if last_exc:
             raise last_exc
 
-    async def generate(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> str:
+    async def generate(
+        self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1
+    ) -> str:
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        response = await self._try_create(messages, max_tokens=max_tokens, temperature=temperature, stream=False)
+        response = await self._try_create(
+            messages, max_tokens=max_tokens, temperature=temperature, stream=False
+        )
         return response.choices[0].message.content or ""
 
-    async def stream(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> AsyncIterator[str]:
+    async def stream(
+        self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1
+    ) -> AsyncIterator[str]:
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        stream = await self._try_create(messages, max_tokens=max_tokens, temperature=temperature, stream=True)
+        stream = await self._try_create(
+            messages, max_tokens=max_tokens, temperature=temperature, stream=True
+        )
         async for chunk in stream:
             token = chunk.choices[0].delta.content
             if token:
@@ -112,13 +133,17 @@ class GroqClient(LLMClient):
 
 # ── Anthropic ─────────────────────────────────────────────────────────────────
 
+
 class AnthropicClient(LLMClient):
     def __init__(self, api_key: str, model: str = "claude-3-5-haiku-20241022") -> None:
         import anthropic
+
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
         self.model = model
 
-    async def generate(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> str:
+    async def generate(
+        self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1
+    ) -> str:
         msg = await self._client.messages.create(
             model=self.model,
             max_tokens=max_tokens,
@@ -128,7 +153,9 @@ class AnthropicClient(LLMClient):
         )
         return msg.content[0].text
 
-    async def stream(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> AsyncIterator[str]:
+    async def stream(
+        self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1
+    ) -> AsyncIterator[str]:
         async with self._client.messages.stream(
             model=self.model,
             max_tokens=max_tokens,
@@ -142,13 +169,17 @@ class AnthropicClient(LLMClient):
 
 # ── Ollama ────────────────────────────────────────────────────────────────────
 
+
 class OllamaClient(LLMClient):
     def __init__(self, base_url: str = "http://localhost:11434", model: str = "llama3") -> None:
         import ollama
+
         self._client = ollama.AsyncClient(host=base_url)
         self.model = model
 
-    async def generate(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> str:
+    async def generate(
+        self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1
+    ) -> str:
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
@@ -156,17 +187,22 @@ class OllamaClient(LLMClient):
         response = await self._client.chat(model=self.model, messages=messages)
         return response["message"]["content"]
 
-    async def stream(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> AsyncIterator[str]:
+    async def stream(
+        self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1
+    ) -> AsyncIterator[str]:
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
-        async for chunk in await self._client.chat(model=self.model, messages=messages, stream=True):
+        async for chunk in await self._client.chat(
+            model=self.model, messages=messages, stream=True
+        ):
             if token := chunk.get("message", {}).get("content", ""):
                 yield token
 
 
 # ── Fake (deterministic, for tests) ─────────────────────────────────────────
+
 
 class FakeLLMClient(LLMClient):
     """Deterministic fake LLM for unit tests — needs no API key."""
@@ -174,10 +210,14 @@ class FakeLLMClient(LLMClient):
     def __init__(self, response: str = "This is a test response [1].") -> None:
         self.response = response
 
-    async def generate(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> str:
+    async def generate(
+        self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1
+    ) -> str:
         return self.response
 
-    async def stream(self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1) -> AsyncIterator[str]:
+    async def stream(
+        self, prompt: str, system: str = "", max_tokens: int = 1024, temperature: float = 0.1
+    ) -> AsyncIterator[str]:
         for word in self.response.split():
             yield word + " "
 
@@ -192,4 +232,6 @@ def build_llm_client(provider: str, settings) -> LLMClient:
         return OllamaClient(base_url=settings.ollama_base_url, model=settings.generation.model)
     if provider == "fake":
         return FakeLLMClient()
-    raise ValueError(f"Unknown LLM provider: {provider!r}. Use 'groq', 'anthropic', 'ollama', or 'fake'.")
+    raise ValueError(
+        f"Unknown LLM provider: {provider!r}. Use 'groq', 'anthropic', 'ollama', or 'fake'."
+    )

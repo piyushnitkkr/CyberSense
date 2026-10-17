@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from cybersense.ingestion.enrich import extract_ids
 from cybersense.models import ChunkMetadata, RetrievedChunk
 from cybersense.retrieval.hybrid import reciprocal_rank_fusion

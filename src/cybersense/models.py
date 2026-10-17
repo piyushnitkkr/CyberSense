@@ -8,8 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 # ── Document types ────────────────────────────────────────────────────────────
+
 
 class DocType(str, Enum):
     technique = "technique"
@@ -27,13 +27,13 @@ class Document(BaseModel):
     """Normalized document yielded by every loader."""
 
     doc_id: str
-    source: str                          # e.g. "attack", "nvd", "owasp"
+    source: str  # e.g. "attack", "nvd", "owasp"
     title: str
     url: str = ""
     doc_type: DocType = DocType.unknown
     text: str
     metadata: dict[str, Any] = Field(default_factory=dict)
-    content_hash: str = ""               # SHA-256; set by pipeline
+    content_hash: str = ""  # SHA-256; set by pipeline
 
 
 class ChunkMetadata(BaseModel):
@@ -59,7 +59,7 @@ class ChunkMetadata(BaseModel):
 class Chunk(BaseModel):
     """Text chunk ready for embedding and indexing."""
 
-    chunk_id: str                        # "{doc_id}:{index}"
+    chunk_id: str  # "{doc_id}:{index}"
     doc_id: str
     text: str
     index: int
@@ -67,6 +67,7 @@ class Chunk(BaseModel):
 
 
 # ── Retrieval ─────────────────────────────────────────────────────────────────
+
 
 class RetrievedChunk(BaseModel):
     """A chunk returned from retrieval with its score."""
@@ -79,6 +80,7 @@ class RetrievedChunk(BaseModel):
 
 # ── Generation ────────────────────────────────────────────────────────────────
 
+
 class Citation(BaseModel):
     n: int
     title: str
@@ -90,11 +92,12 @@ class Citation(BaseModel):
 
 
 class ChatMessage(BaseModel):
-    role: str   # "user" | "assistant"
+    role: str  # "user" | "assistant"
     content: str
 
 
 # ── API request / response ────────────────────────────────────────────────────
+
 
 class FilterParams(BaseModel):
     sources: list[str] | None = None
@@ -122,13 +125,13 @@ class ChatResponse(BaseModel):
 
 class FeedbackRequest(BaseModel):
     message_id: str
-    rating: str                 # "up" | "down"
+    rating: str  # "up" | "down"
     comment: str | None = None
 
 
 class IngestRequest(BaseModel):
     source: str
-    since: str | None = None    # YYYY-MM-DD
+    since: str | None = None  # YYYY-MM-DD
     limit: int | None = None
 
 

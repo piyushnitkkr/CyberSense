@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import tempfile
-import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -35,11 +34,16 @@ async def upload_document(
     """Upload a PDF/DOCX/MD/TXT/HTML file and ingest it."""
     filename = file.filename or "upload"
     if not validate_upload_filename(filename, settings.api.allowed_extensions):
-        raise HTTPException(status_code=400, detail=f"Disallowed file extension. Permitted: {settings.api.allowed_extensions}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Disallowed file extension. Permitted: {settings.api.allowed_extensions}",
+        )
 
     content = await file.read()
     if len(content) > settings.api.upload_max_mb * 1024 * 1024:
-        raise HTTPException(status_code=413, detail=f"File exceeds {settings.api.upload_max_mb} MB limit")
+        raise HTTPException(
+            status_code=413, detail=f"File exceeds {settings.api.upload_max_mb} MB limit"
+        )
 
     suffix = Path(filename).suffix.lower()
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -47,9 +51,9 @@ async def upload_document(
         tmp_path = Path(tmp.name)
 
     try:
-        from cybersense.ingestion.pdf import PDFLoader
-        from cybersense.ingestion.markdown import MarkdownLoader
         from cybersense.ingestion.html import HTMLLoader
+        from cybersense.ingestion.markdown import MarkdownLoader
+        from cybersense.ingestion.pdf import PDFLoader
 
         clean_title = Path(filename).stem.replace("-", " ").replace("_", " ").title()
         # Hash the *content* so two files with the same name don't collide
@@ -76,19 +80,32 @@ async def upload_document(
         elif suffix == ".txt":
             text = content.decode("utf-8", errors="replace")
             from cybersense.models import Document
-            docs = [Document(
-                doc_id=doc_id,
-                source="upload", title=clean_title, doc_type=DocType.upload, text=text,
-            )]
+
+            docs = [
+                Document(
+                    doc_id=doc_id,
+                    source="upload",
+                    title=clean_title,
+                    doc_type=DocType.upload,
+                    text=text,
+                )
+            ]
         elif suffix == ".docx":
             from docx import Document as DocxDocument
+
             docx = DocxDocument(str(tmp_path))
             text = "\n".join(p.text for p in docx.paragraphs)
             from cybersense.models import Document
-            docs = [Document(
-                doc_id=doc_id,
-                source="upload", title=clean_title, doc_type=DocType.upload, text=text,
-            )]
+
+            docs = [
+                Document(
+                    doc_id=doc_id,
+                    source="upload",
+                    title=clean_title,
+                    doc_type=DocType.upload,
+                    text=text,
+                )
+            ]
         else:
             raise HTTPException(status_code=400, detail="Unsupported file type")
 
@@ -101,7 +118,9 @@ async def upload_document(
         pipeline = IngestionPipeline(db, vector_store, embedder, settings)
         run = await pipeline.run("upload", iter(docs))
         if run.failed > 0 and run.added == 0 and run.updated == 0:
-            raise HTTPException(status_code=500, detail=f"Ingestion failed: {run.error or 'Failed to index chunks'}")
+            raise HTTPException(
+                status_code=500, detail=f"Ingestion failed: {run.error or 'Failed to index chunks'}"
+            )
 
         return {
             "status": "ok",
@@ -114,7 +133,9 @@ async def upload_document(
         tmp_path.unlink(missing_ok=True)
 
 
-@router.get("/documents", response_model=list[DocumentListItem], dependencies=[Depends(verify_api_key)])
+@router.get(
+    "/documents", response_model=list[DocumentListItem], dependencies=[Depends(verify_api_key)]
+)
 async def list_documents(
     source: str | None = None,
     doc_type: str | None = None,
@@ -126,7 +147,10 @@ async def list_documents(
     if doc_type:
         stmt = stmt.where(DocumentRecord.doc_type == doc_type)
     result = await db.execute(stmt)
-    return [DocumentListItem(**{c.name: getattr(r, c.name) for c in DocumentRecord.__table__.columns}) for r in result.scalars()]
+    return [
+        DocumentListItem(**{c.name: getattr(r, c.name) for c in DocumentRecord.__table__.columns})
+        for r in result.scalars()
+    ]
 
 
 @router.delete("/documents/{doc_id}", dependencies=[Depends(verify_api_key)])
@@ -159,6 +183,7 @@ async def trigger_ingest(
 ):
     """Trigger ingestion of a named source (admin endpoint)."""
     from cybersense.scripts_lib import get_loader_for_source
+
     try:
         loader = get_loader_for_source(source, settings)
     except ValueError as exc:
@@ -168,22 +193,40 @@ async def trigger_ingest(
     pipeline = IngestionPipeline(db, vector_store, embedder, settings)
     run = await pipeline.run(source, docs)
     return IngestionRunStatus(
-        id=run.id, source=run.source, started_at=run.started_at,
-        finished_at=run.finished_at, seen=run.seen, added=run.added,
-        updated=run.updated, skipped=run.skipped, failed=run.failed,
-        status=run.status, error=run.error,
+        id=run.id,
+        source=run.source,
+        started_at=run.started_at,
+        finished_at=run.finished_at,
+        seen=run.seen,
+        added=run.added,
+        updated=run.updated,
+        skipped=run.skipped,
+        failed=run.failed,
+        status=run.status,
+        error=run.error,
     )
 
 
-@router.get("/ingest/runs", response_model=list[IngestionRunStatus], dependencies=[Depends(verify_api_key)])
+@router.get(
+    "/ingest/runs", response_model=list[IngestionRunStatus], dependencies=[Depends(verify_api_key)]
+)
 async def list_ingest_runs(db: AsyncSession = Depends(get_session)):
-    result = await db.execute(select(IngestionRun).order_by(IngestionRun.started_at.desc()).limit(50))
+    result = await db.execute(
+        select(IngestionRun).order_by(IngestionRun.started_at.desc()).limit(50)
+    )
     return [
         IngestionRunStatus(
-            id=r.id, source=r.source, started_at=r.started_at,
-            finished_at=r.finished_at, seen=r.seen, added=r.added,
-            updated=r.updated, skipped=r.skipped, failed=r.failed,
-            status=r.status, error=r.error,
+            id=r.id,
+            source=r.source,
+            started_at=r.started_at,
+            finished_at=r.finished_at,
+            seen=r.seen,
+            added=r.added,
+            updated=r.updated,
+            skipped=r.skipped,
+            failed=r.failed,
+            status=r.status,
+            error=r.error,
         )
         for r in result.scalars()
     ]

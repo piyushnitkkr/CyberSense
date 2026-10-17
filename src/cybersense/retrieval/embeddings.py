@@ -14,7 +14,9 @@ class EmbeddingModel:
     fits comfortably within Render's 512 MB free-tier RAM.
     """
 
-    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5", device: str = "cpu", batch_size: int = 16) -> None:
+    def __init__(
+        self, model_name: str = "BAAI/bge-small-en-v1.5", device: str = "cpu", batch_size: int = 16
+    ) -> None:
         self.model_name = model_name
         self.device = device
         self.batch_size = batch_size
@@ -27,12 +29,17 @@ class EmbeddingModel:
             return
 
         import os
+
         cache_dir = os.environ.get("FASTEMBED_CACHE_PATH")
 
         # Try fastembed first (lightweight ONNX, no torch)
         try:
             from fastembed import TextEmbedding
-            logger.info("Loading embedding model via fastembed (ONNX)", extra={"model": self.model_name, "cache_dir": cache_dir})
+
+            logger.info(
+                "Loading embedding model via fastembed (ONNX)",
+                extra={"model": self.model_name, "cache_dir": cache_dir},
+            )
             self._model = TextEmbedding(
                 model_name=self.model_name,
                 cache_dir=cache_dir,
@@ -50,7 +57,11 @@ class EmbeddingModel:
         # Fallback: sentence-transformers (requires torch)
         try:
             from sentence_transformers import SentenceTransformer
-            logger.info("Loading embedding model via sentence-transformers", extra={"model": self.model_name})
+
+            logger.info(
+                "Loading embedding model via sentence-transformers",
+                extra={"model": self.model_name},
+            )
             self._model = SentenceTransformer(self.model_name, device=self.device)
             self._use_fastembed = False
         except Exception as st_err:
@@ -67,7 +78,6 @@ class EmbeddingModel:
             embeddings = list(self._model.embed(texts, batch_size=batch_sz))
             return [e.tolist() for e in embeddings]
         else:
-            import numpy as np
             vecs = self._model.encode(
                 texts,
                 batch_size=self.batch_size,

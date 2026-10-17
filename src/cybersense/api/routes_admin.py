@@ -16,8 +16,9 @@ router = APIRouter(tags=["admin"])
 @router.get("/admin/stats", dependencies=[Depends(verify_api_key)])
 async def stats(db: AsyncSession = Depends(get_session)):
     result = await db.execute(
-        select(DocumentRecord.source, func.count(DocumentRecord.doc_id).label("count"))
-        .group_by(DocumentRecord.source)
+        select(DocumentRecord.source, func.count(DocumentRecord.doc_id).label("count")).group_by(
+            DocumentRecord.source
+        )
     )
     counts = {row.source: row.count for row in result}
     total = sum(counts.values())
@@ -52,7 +53,10 @@ async def rebuild_bm25_index(
             )
         except Exception as exc:
             import logging
-            logging.getLogger(__name__).warning("BM25 rebuild: scroll failed, stopping early", extra={"error": str(exc)})
+
+            logging.getLogger(__name__).warning(
+                "BM25 rebuild: scroll failed, stopping early", extra={"error": str(exc)}
+            )
             break
 
         for point in results:
@@ -65,6 +69,7 @@ async def rebuild_bm25_index(
                 metadatas.append(ChunkMetadata(**meta_dict))
             except Exception as exc:
                 import logging
+
                 logging.getLogger(__name__).warning(
                     "BM25 rebuild: skipping point with invalid payload",
                     extra={"point_id": str(point.id), "error": str(exc)},

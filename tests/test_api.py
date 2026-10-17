@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import io
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -17,7 +18,6 @@ from cybersense.api.deps import (
     get_vector_store,
 )
 from cybersense.api.main import app
-from cybersense.config import Settings, get_settings
 from cybersense.db.session import get_session
 from cybersense.db.tables import Base
 from cybersense.generation.llm import FakeLLMClient

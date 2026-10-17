@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-import io
-import zipfile
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 from xml.etree import ElementTree as ET
 
 import requests

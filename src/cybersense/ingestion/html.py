@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import requests
 from bs4 import BeautifulSoup
@@ -19,7 +19,9 @@ logger = get_logger(__name__)
 class HTMLLoader(BaseLoader):
     source_name = "html"
 
-    def __init__(self, source_label: str = "advisory", doc_type: DocType = DocType.advisory) -> None:
+    def __init__(
+        self, source_label: str = "advisory", doc_type: DocType = DocType.advisory
+    ) -> None:
         self.source_label = source_label
         self.doc_type = doc_type
 
@@ -55,7 +57,9 @@ class HTMLLoader(BaseLoader):
         title = title_el.get_text(strip=True) if title_el else (path.stem if path else "Unknown")
         text = soup.get_text(separator="\n", strip=True)
         content_hash = hashlib.sha256(text.encode()).hexdigest()
-        doc_id = f"{self.source_label}:{hashlib.sha256((url or str(path)).encode()).hexdigest()[:12]}"
+        doc_id = (
+            f"{self.source_label}:{hashlib.sha256((url or str(path)).encode()).hexdigest()[:12]}"
+        )
 
         return Document(
             doc_id=doc_id,

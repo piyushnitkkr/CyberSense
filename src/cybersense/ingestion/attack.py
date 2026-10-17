@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import requests
 
@@ -51,11 +51,16 @@ class ATTACKLoader(BaseLoader):
             try:
                 stix = self._fetch_or_cache(bundle_name, url)
             except Exception as exc:
-                logger.warning("ATT&CK: failed to load bundle", extra={"bundle": bundle_name, "error": str(exc)})
+                logger.warning(
+                    "ATT&CK: failed to load bundle",
+                    extra={"bundle": bundle_name, "error": str(exc)},
+                )
                 continue
 
             objects = stix.get("objects", [])
-            techniques = [o for o in objects if o.get("type") == "attack-pattern" and not o.get("revoked")]
+            techniques = [
+                o for o in objects if o.get("type") == "attack-pattern" and not o.get("revoked")
+            ]
             # Build lookup maps from this bundle
             mitigation_map = _build_mitigation_map(objects)
             data_source_map = _build_data_source_map(objects)
@@ -71,7 +76,9 @@ class ATTACKLoader(BaseLoader):
                     continue
                 seen_ids.add(attack_id)
                 try:
-                    yield self._to_document(obj, attack_id, bundle_name, mitigation_map, data_source_map)
+                    yield self._to_document(
+                        obj, attack_id, bundle_name, mitigation_map, data_source_map
+                    )
                 except Exception as exc:
                     logger.warning(
                         "ATT&CK: skipping object",
@@ -127,7 +134,9 @@ class ATTACKLoader(BaseLoader):
         )
         name = obj.get("name", "")
         description = obj.get("description", "")
-        phases = [p.get("phase_name", "").replace("-", " ") for p in obj.get("kill_chain_phases", [])]
+        phases = [
+            p.get("phase_name", "").replace("-", " ") for p in obj.get("kill_chain_phases", [])
+        ]
         platforms = obj.get("x_mitre_platforms", [])
         detection = obj.get("x_mitre_detection", "")
         is_subtechnique = obj.get("x_mitre_is_subtechnique", False)
@@ -164,7 +173,7 @@ class ATTACKLoader(BaseLoader):
             sections.append(f"\nData Sources: {', '.join(all_data_sources)}")
 
         if mitigations:
-            sections.append(f"\nMitigations:\n" + "\n".join(f"- {m}" for m in mitigations))
+            sections.append("\nMitigations:\n" + "\n".join(f"- {m}" for m in mitigations))
 
         text = "\n".join(sections)
         content_hash = hashlib.sha256(text.encode()).hexdigest()
@@ -190,6 +199,7 @@ class ATTACKLoader(BaseLoader):
 
 # ── STIX helper functions ─────────────────────────────────────────────────────
 
+
 def _get_attack_id(obj: dict) -> str:
     """Extract the ATT&CK ID (e.g. T1059) from external references."""
     for ref in obj.get("external_references", []):
@@ -202,9 +212,7 @@ def _build_mitigation_map(objects: list[dict]) -> dict[str, list[str]]:
     """Return {technique_stix_id: [mitigation_name, ...]} from STIX relationships."""
     # Index course-of-action objects by id
     mitigations: dict[str, str] = {
-        o["id"]: o.get("name", "")
-        for o in objects
-        if o.get("type") == "course-of-action"
+        o["id"]: o.get("name", "") for o in objects if o.get("type") == "course-of-action"
     }
     result: dict[str, list[str]] = {}
     for rel in objects:
@@ -222,9 +230,7 @@ def _build_mitigation_map(objects: list[dict]) -> dict[str, list[str]]:
 def _build_data_source_map(objects: list[dict]) -> dict[str, list[str]]:
     """Return {technique_stix_id: [data_source_name, ...]} from STIX x-mitre-data-source objects."""
     ds_names: dict[str, str] = {
-        o["id"]: o.get("name", "")
-        for o in objects
-        if o.get("type") == "x-mitre-data-source"
+        o["id"]: o.get("name", "") for o in objects if o.get("type") == "x-mitre-data-source"
     }
     result: dict[str, list[str]] = {}
     for rel in objects:

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import pytest
-
 from cybersense.config import Settings, get_settings
 
 

@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from cybersense.api.deps import (
     get_bm25,
@@ -27,7 +25,10 @@ from cybersense.db.tables import Feedback, Message, Session
 from cybersense.generation.citations import build_citations
 from cybersense.generation.guardrails import check_input
 from cybersense.generation.llm import LLMClient
-from cybersense.generation.prompts import build_chat_prompt, build_fallback_prompt, no_context_response
+from cybersense.generation.prompts import (
+    build_chat_prompt,
+    build_fallback_prompt,
+)
 from cybersense.models import (
     ChatMessage,
     ChatRequest,
@@ -108,34 +109,46 @@ async def chat(
         # No KB context — fall back to LLM general knowledge with disclaimer
         fallback_system, fallback_user = build_fallback_prompt(req.message, history)
         if req.stream:
-            return _stream_response(llm, fallback_system, fallback_user, [], session.id, rewritten_query, latency_ms, db)
-        answer_raw = await llm.generate(fallback_user, system=fallback_system, max_tokens=settings.generation.max_tokens)
+            return _stream_response(
+                llm, fallback_system, fallback_user, [], session.id, rewritten_query, latency_ms, db
+            )
+        answer_raw = await llm.generate(
+            fallback_user, system=fallback_system, max_tokens=settings.generation.max_tokens
+        )
         answer_text = answer_raw.strip()
         citations: list[Citation] = []
     else:
         system, user_msg = build_chat_prompt(req.message, chunks, history)
         if req.stream:
-            return _stream_response(llm, system, user_msg, chunks, session.id, rewritten_query, latency_ms, db)
-        answer_raw = await llm.generate(user_msg, system=system, max_tokens=settings.generation.max_tokens)
+            return _stream_response(
+                llm, system, user_msg, chunks, session.id, rewritten_query, latency_ms, db
+            )
+        answer_raw = await llm.generate(
+            user_msg, system=system, max_tokens=settings.generation.max_tokens
+        )
         answer_text, citations = build_citations(answer_raw, chunks)
 
     # Persist messages
     message_id = str(uuid.uuid4())
-    db.add(Message(
-        id=message_id,
-        session_id=session.id,
-        role="user",
-        content=req.message,
-        rewritten_query=rewritten_query,
-        latency_ms_json=json.dumps(latency_ms),
-    ))
-    db.add(Message(
-        id=str(uuid.uuid4()),
-        session_id=session.id,
-        role="assistant",
-        content=answer_text,
-        citations_json=json.dumps([c.model_dump() for c in citations]),
-    ))
+    db.add(
+        Message(
+            id=message_id,
+            session_id=session.id,
+            role="user",
+            content=req.message,
+            rewritten_query=rewritten_query,
+            latency_ms_json=json.dumps(latency_ms),
+        )
+    )
+    db.add(
+        Message(
+            id=str(uuid.uuid4()),
+            session_id=session.id,
+            role="assistant",
+            content=answer_text,
+            citations_json=json.dumps([c.model_dump() for c in citations]),
+        )
+    )
     await db.commit()
 
     return ChatResponse(
@@ -174,16 +187,15 @@ def _stream_response(llm, system, user_msg, chunks, session_id, rewritten_query,
 
 @router.get("/sessions/{session_id}", dependencies=[Depends(verify_api_key)])
 async def get_session_history(session_id: str, db: AsyncSession = Depends(get_session)):
-    stmt = (
-        select(Message)
-        .where(Message.session_id == session_id)
-        .order_by(Message.created_at)
-    )
+    stmt = select(Message).where(Message.session_id == session_id).order_by(Message.created_at)
     result = await db.execute(stmt)
     messages = result.scalars().all()
     if not messages:
         raise HTTPException(status_code=404, detail="Session not found")
-    return [{"id": m.id, "role": m.role, "content": m.content, "created_at": m.created_at} for m in messages]
+    return [
+        {"id": m.id, "role": m.role, "content": m.content, "created_at": m.created_at}
+        for m in messages
+    ]
 
 
 @router.delete("/sessions/{session_id}", dependencies=[Depends(verify_api_key)])

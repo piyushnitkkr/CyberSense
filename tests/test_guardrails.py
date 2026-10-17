@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from cybersense.generation.guardrails import (
-    _REFUSAL_MESSAGE,
     check_input,
     sanitize_chunk_text,
     validate_upload_filename,

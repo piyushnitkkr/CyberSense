@@ -5,8 +5,8 @@ from __future__ import annotations
 import hashlib
 import io
 import zipfile
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 from xml.etree import ElementTree as ET
 
 import requests
@@ -78,11 +78,7 @@ class CWELoader(BaseLoader):
             title = f"{cwe_id}: {name}" if name else cwe_id
             description = w.get("Description", "")
             likelihood = w.get("Likelihood_Of_Exploit", "")
-            text = (
-                f"{title}\n"
-                f"Likelihood: {likelihood}\n\n"
-                f"Description:\n{description}"
-            )
+            text = f"{title}\n" f"Likelihood: {likelihood}\n\n" f"Description:\n{description}"
             content_hash = hashlib.sha256(text.encode()).hexdigest()
             return Document(
                 doc_id=f"cwe:{cwe_id}",

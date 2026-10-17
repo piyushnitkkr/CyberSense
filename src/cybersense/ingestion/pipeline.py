@@ -29,8 +29,8 @@ class IngestionPipeline:
     def __init__(
         self,
         session: AsyncSession,
-        vector_store: "VectorStore",
-        embedder: "EmbeddingModel",
+        vector_store: VectorStore,
+        embedder: EmbeddingModel,
         settings: Settings,
     ) -> None:
         self.session = session
@@ -123,13 +123,18 @@ class IngestionPipeline:
         try:
             chunks = self._ultra_light_chunk(doc)
         except Exception as exc:
-            logger.error("Failed to chunk document", extra={"doc_id": doc.doc_id, "error": str(exc)})
+            logger.error(
+                "Failed to chunk document", extra={"doc_id": doc.doc_id, "error": str(exc)}
+            )
             raise
 
         # Cap chunks aggressively for Render's 512MB limit
         MAX_CHUNKS = 10
         if len(chunks) > MAX_CHUNKS:
-            logger.info("Capping document chunks for memory safety", extra={"doc_id": doc.doc_id, "original": len(chunks), "capped": MAX_CHUNKS})
+            logger.info(
+                "Capping document chunks for memory safety",
+                extra={"doc_id": doc.doc_id, "original": len(chunks), "capped": MAX_CHUNKS},
+            )
             chunks = chunks[:MAX_CHUNKS]
 
         # Ultra-small batch embedding for safety
@@ -137,7 +142,7 @@ class IngestionPipeline:
         if texts:
             vectors = []
             for i in range(0, len(texts), 2):  # Batch of 2
-                batch = texts[i:i + 2]
+                batch = texts[i : i + 2]
                 batch_vectors = self.embedder.encode(batch)
                 vectors.extend(batch_vectors)
                 gc.collect()
@@ -189,7 +194,11 @@ class IngestionPipeline:
             text = text[:max_text_length] + "... [content truncated for memory safety]"
             logger.info(
                 "PDF: text truncated for memory safety",
-                extra={"doc_id": doc.doc_id, "original_length": len(doc.text), "truncated": max_text_length},
+                extra={
+                    "doc_id": doc.doc_id,
+                    "original_length": len(doc.text),
+                    "truncated": max_text_length,
+                },
             )
 
         # Create minimal number of chunks
@@ -260,4 +269,3 @@ class IngestionPipeline:
             )
 
         return chunks
-

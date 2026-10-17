@@ -38,12 +38,12 @@ class QueryPipeline:
 
     def __init__(
         self,
-        vector_store: "VectorStore",
-        bm25: "BM25Index",
-        embedder: "EmbeddingModel",
+        vector_store: VectorStore,
+        bm25: BM25Index,
+        embedder: EmbeddingModel,
         settings: Settings,
-        reranker: "Reranker | None" = None,
-        llm: "LLMClient | None" = None,
+        reranker: Reranker | None = None,
+        llm: LLMClient | None = None,
     ) -> None:
         self.vector_store = vector_store
         self.bm25 = bm25
@@ -85,7 +85,9 @@ class QueryPipeline:
             if allowed_sources:
                 entity_chunks = [c for c in entity_chunks if c.metadata.source in allowed_sources]
             if allowed_doc_types:
-                entity_chunks = [c for c in entity_chunks if c.metadata.doc_type in allowed_doc_types]
+                entity_chunks = [
+                    c for c in entity_chunks if c.metadata.doc_type in allowed_doc_types
+                ]
         timings["entity_ms"] = (time.perf_counter() - t0) * 1000
 
         # 3. Dense retrieval — Qdrant applies source/doc_type filter natively

@@ -8,18 +8,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from cybersense.config import get_settings
+from cybersense.db.session import init_db
 from cybersense.retrieval.embeddings import EmbeddingModel
 from cybersense.retrieval.vector_store import VectorStore
-from cybersense.db.session import init_db
 
 
 async def rebuild_bm25_index(vector_store: VectorStore):
     """Rebuild BM25 sparse index from Qdrant."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("[INFO] Rebuilding BM25 index...")
 
-    from cybersense.retrieval.sparse import BM25Index
     from cybersense.models import ChunkMetadata
+    from cybersense.retrieval.sparse import BM25Index
 
     bm25 = BM25Index()
     texts = []
@@ -54,19 +54,19 @@ async def rebuild_bm25_index(vector_store: VectorStore):
 
     bm25.build(texts, chunk_ids, metadatas)
     print(f"[OK] BM25 index rebuilt with {len(texts)} chunks")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
     return len(texts)
 
 
 async def ingest_attack():
     """Ingest MITRE ATT&CK Enterprise techniques."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("[1/3] MITRE ATT&CK Enterprise")
-    print("="*60)
+    print("=" * 60)
 
+    from cybersense.db.session import _SessionFactory as SessionFactory
     from cybersense.ingestion.attack import ATTACKLoader
     from cybersense.ingestion.pipeline import IngestionPipeline
-    from cybersense.db.session import _SessionFactory as SessionFactory
 
     settings = get_settings()
 
@@ -104,13 +104,13 @@ async def ingest_attack():
 
 async def ingest_cwe():
     """Ingest MITRE CWE weaknesses."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("[2/3] MITRE CWE (Common Weakness Enumeration)")
-    print("="*60)
+    print("=" * 60)
 
+    from cybersense.db.session import _SessionFactory as SessionFactory
     from cybersense.ingestion.cwe import CWELoader
     from cybersense.ingestion.pipeline import IngestionPipeline
-    from cybersense.db.session import _SessionFactory as SessionFactory
 
     settings = get_settings()
 
@@ -146,13 +146,13 @@ async def ingest_cwe():
 
 async def ingest_owasp():
     """Ingest OWASP Top 10 2025."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("[3/3] OWASP Top 10:2025")
-    print("="*60)
+    print("=" * 60)
 
-    from cybersense.ingestion.pipeline import IngestionPipeline
-    from cybersense.models import Document, DocType
     from cybersense.db.session import _SessionFactory as SessionFactory
+    from cybersense.ingestion.pipeline import IngestionPipeline
+    from cybersense.models import DocType, Document
 
     settings = get_settings()
 
@@ -204,14 +204,14 @@ For detailed information, refer to the official OWASP Top 10 documentation.
             doc_id=f"owasp:top10:2025:{code}",
             source="owasp",
             title=f"OWASP Top 10:2025 - {code}: {name}",
-            url=f"https://owasp.org/www-project-top-ten/",
+            url="https://owasp.org/www-project-top-ten/",
             doc_type=DocType.standard,
             text=text,
             metadata={
                 "version": "2025",
                 "category": code,
                 "name": name,
-            }
+            },
         )
         docs.append(doc)
 
@@ -227,12 +227,12 @@ For detailed information, refer to the official OWASP Top 10 documentation.
 
 async def main():
     """Main ingestion orchestrator."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("    CyberSense Master Data Ingestion")
-    print("="*60)
+    print("=" * 60)
     print("  College Project - RAG System for Cybersecurity")
     print("  Date: October 17, 2026")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
     # Initialize database
     print("[INIT] Initializing database...")
@@ -280,16 +280,16 @@ async def main():
         total_chunks = 0
 
     # Final summary
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("    INGESTION COMPLETE")
-    print("="*60)
+    print("=" * 60)
     print(f"  MITRE ATT&CK:        {stats['attack']:>5} documents")
     print(f"  MITRE CWE:           {stats['cwe']:>5} documents")
     print(f"  OWASP Top 10:        {stats['owasp']:>5} documents")
-    print(f"  " + "-"*54)
+    print("  " + "-" * 54)
     print(f"  Total Documents:     {sum(stats.values()):>5}")
     print(f"  Total Chunks (BM25): {total_chunks:>5}")
-    print("="*60)
+    print("=" * 60)
     print("\n✅ CyberSense knowledge base is ready!")
     print("   Backend: https://cybersense-api-vorj.onrender.com")
     print("   Documentation: See DATA_SOURCES.md")

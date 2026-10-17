@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import time
+from collections.abc import Iterator
 from datetime import datetime, timedelta
-from typing import Iterator
 
 import requests
 
@@ -34,7 +34,9 @@ class NVDLoader(BaseLoader):
         self.request_delay = request_delay
         self.kev_cve_ids = kev_cve_ids or []
 
-    def load(self, since: str | None = None, limit: int | None = None, **kwargs) -> Iterator[Document]:
+    def load(
+        self, since: str | None = None, limit: int | None = None, **kwargs
+    ) -> Iterator[Document]:
         headers = {"apiKey": self.api_key} if self.api_key else {}
         start_date = (
             datetime.fromisoformat(since)

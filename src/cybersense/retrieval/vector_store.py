@@ -30,6 +30,7 @@ class VectorStore:
                 url = self.url
                 if "cloud.qdrant.io" in url:
                     import re
+
                     url = re.sub(r":6333/?$", "", url)
                 self._client = AsyncQdrantClient(
                     url=url,
@@ -76,7 +77,9 @@ class VectorStore:
             collection_name=self.collection,
             points_selector=models.FilterSelector(
                 filter=models.Filter(
-                    must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))]
+                    must=[
+                        models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))
+                    ]
                 )
             ),
         )
@@ -88,14 +91,16 @@ class VectorStore:
             PointStruct(
                 id=self._chunk_uuid(chunk.chunk_id),
                 vector=vec,
-                payload={**chunk.metadata.model_dump(), "text": chunk.text, "chunk_id": chunk.chunk_id},
+                payload={
+                    **chunk.metadata.model_dump(),
+                    "text": chunk.text,
+                    "chunk_id": chunk.chunk_id,
+                },
             )
             for chunk, vec in zip(chunks, vectors)
         ]
         await self.client.upsert(collection_name=self.collection, points=points)
-        logger.debug(
-            "Upserted chunks", extra={"doc_id": doc_id, "count": len(points)}
-        )
+        logger.debug("Upserted chunks", extra={"doc_id": doc_id, "count": len(points)})
 
     async def search(
         self,
@@ -128,7 +133,9 @@ class VectorStore:
                 chunk_id=r.payload.get("chunk_id", r.payload.get("doc_id", "") + ":" + str(r.id)),
                 text=r.payload.get("text", ""),
                 score=r.score,
-                metadata=ChunkMetadata(**{k: v for k, v in r.payload.items() if k not in ("text", "chunk_id")}),
+                metadata=ChunkMetadata(
+                    **{k: v for k, v in r.payload.items() if k not in ("text", "chunk_id")}
+                ),
             )
             for r in results
         ]
@@ -142,9 +149,7 @@ class VectorStore:
         results = await self.client.scroll(
             collection_name=self.collection,
             scroll_filter=models.Filter(
-                should=[
-                    models.FieldCondition(key="ids", match=models.MatchAny(any=ids))
-                ]
+                should=[models.FieldCondition(key="ids", match=models.MatchAny(any=ids))]
             ),
             limit=limit,
             with_payload=True,
@@ -156,7 +161,9 @@ class VectorStore:
                 chunk_id=c.payload.get("chunk_id", str(c.id)),
                 text=c.payload.get("text", ""),
                 score=1.0,  # exact match
-                metadata=ChunkMetadata(**{k: v for k, v in c.payload.items() if k not in ("text", "chunk_id")}),
+                metadata=ChunkMetadata(
+                    **{k: v for k, v in c.payload.items() if k not in ("text", "chunk_id")}
+                ),
             )
             for c in chunks
         ]
@@ -166,7 +173,9 @@ class VectorStore:
             collection_name=self.collection,
             points_selector=models.FilterSelector(
                 filter=models.Filter(
-                    must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))]
+                    must=[
+                        models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))
+                    ]
                 )
             ),
         )
@@ -191,6 +200,8 @@ class VectorStore:
     @staticmethod
     def _chunk_uuid(chunk_id: str) -> str:
         """Convert a chunk_id string to a UUID-compatible hex string (Qdrant requirement)."""
-        import hashlib, uuid
+        import hashlib
+        import uuid
+
         h = hashlib.md5(chunk_id.encode()).hexdigest()
         return str(uuid.UUID(h))

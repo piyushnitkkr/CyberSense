@@ -5,10 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
-    JSON,
-    Boolean,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
     String,
@@ -59,7 +56,7 @@ class Session(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    messages: Mapped[list["Message"]] = relationship("Message", back_populates="session")
+    messages: Mapped[list[Message]] = relationship("Message", back_populates="session")
 
 
 class Message(Base):
@@ -76,8 +73,8 @@ class Message(Base):
     latency_ms_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    session: Mapped["Session"] = relationship("Session", back_populates="messages")
-    feedbacks: Mapped[list["Feedback"]] = relationship("Feedback", back_populates="message")
+    session: Mapped[Session] = relationship("Session", back_populates="messages")
+    feedbacks: Mapped[list[Feedback]] = relationship("Feedback", back_populates="message")
 
 
 class Feedback(Base):
@@ -91,4 +88,4 @@ class Feedback(Base):
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    message: Mapped["Message"] = relationship("Message", back_populates="feedbacks")
+    message: Mapped[Message] = relationship("Message", back_populates="feedbacks")

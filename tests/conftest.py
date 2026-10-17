@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from cybersense.config import Settings
 from cybersense.db.tables import Base
-from cybersense.generation.llm import FakeLLMClient, LLMClient
+from cybersense.generation.llm import FakeLLMClient
 from cybersense.models import RetrievedChunk
 
 
@@ -44,11 +44,6 @@ async def db_session() -> AsyncIterator[AsyncSession]:
         yield session
 
     await engine.dispose()
-
-
-@pytest.fixture
-def fake_llm() -> FakeTestLLMClient:
-    return FakeTestLLMClient()
 
 
 @pytest.fixture

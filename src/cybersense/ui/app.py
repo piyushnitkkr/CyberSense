@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import os
 import uuid
 
 import requests
 import streamlit as st
+
 
 def _get_default_api_base() -> str:
     env_val = os.getenv("API_BASE_URL", "")
@@ -21,6 +21,7 @@ def _get_default_api_base() -> str:
     # Default to live Render backend for cloud deployment
     return "https://cybersense-api-vorj.onrender.com"
 
+
 st.set_page_config(
     page_title="CyberSense — Cybersecurity RAG Chatbot",
     page_icon="🛡️",
@@ -29,6 +30,7 @@ st.set_page_config(
 
 
 # ── Helper functions (must be defined before use) ─────────────────────────────
+
 
 def _render_citations(citations: list[dict]) -> None:
     if not citations:
@@ -101,7 +103,11 @@ with st.sidebar:
     )
 
     top_k = st.slider("Top-K results", min_value=3, max_value=15, value=8)
-    reranker_on = st.checkbox("Enable cross-encoder reranker", value=False, help="Disabled by default on free-tier deployments to save RAM.")
+    reranker_on = st.checkbox(
+        "Enable cross-encoder reranker",
+        value=False,
+        help="Disabled by default on free-tier deployments to save RAM.",
+    )
 
     st.divider()
     st.subheader("📄 Upload Document")
@@ -122,7 +128,9 @@ with st.sidebar:
                     data = resp.json()
                     title = data.get("title", uploaded.name)
                     doc_id = data.get("doc_ids", [""])[0]
-                    st.success(f"✅ Ingested successfully!\n\n**Document:** {title}\n\n**ID:** `{doc_id}`")
+                    st.success(
+                        f"✅ Ingested successfully!\n\n**Document:** {title}\n\n**ID:** `{doc_id}`"
+                    )
                 else:
                     try:
                         err = resp.json().get("detail", resp.text)
@@ -130,9 +138,13 @@ with st.sidebar:
                         err = resp.text[:300]
                     st.error(f"❌ {err}")
             except requests.exceptions.Timeout:
-                st.error("❌ Ingestion timed out. The backend took too long to process the document.")
+                st.error(
+                    "❌ Ingestion timed out. The backend took too long to process the document."
+                )
             except requests.exceptions.ConnectionError:
-                st.error(f"❌ Cannot connect to backend at {API_BASE}. Please verify the Backend API URL.")
+                st.error(
+                    f"❌ Cannot connect to backend at {API_BASE}. Please verify the Backend API URL."
+                )
             except Exception as exc:
                 st.error(f"❌ Upload failed: {exc}")
 
@@ -221,13 +233,14 @@ if prompt := st.chat_input("Ask a cybersecurity question…"):
             placeholder.error(f"❌ {err_msg}")
             full_answer = err_msg
 
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": full_answer,
-            "citations": citations,
-            "message_id": message_id,
-        })
-
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": full_answer,
+                "citations": citations,
+                "message_id": message_id,
+            }
+        )
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from cybersense.ingestion.attack import ATTACKLoader
 from cybersense.ingestion.cwe import CWELoader
 from cybersense.ingestion.kev import KEVLoader

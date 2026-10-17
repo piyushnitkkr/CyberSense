@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-import time
-from typing import Iterator
+from collections.abc import Iterator
 
 import requests
 
@@ -64,7 +63,7 @@ class KEVLoader(BaseLoader):
             doc_id=f"kev:{cve_id}",
             source="kev",
             title=title,
-            url=f"https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+            url="https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
             doc_type=DocType.kev,
             text=text,
             metadata={
