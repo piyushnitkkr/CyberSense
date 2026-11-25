@@ -173,10 +173,9 @@ for msg in st.session_state.messages:
 
 # ── Voice input row ───────────────────────────────────────────────────────────────
 
-voice_col, info_col = st.columns([1, 5], gap="small")
+voice_col, info_col = st.columns([2, 4], gap="small")
 
 with voice_col:
-    st.markdown("**🎙️ Voice**")
     voice_result = render_voice_input(
         lang=st.session_state.voice_lang,
         key="main_voice_btn",
@@ -186,7 +185,7 @@ with voice_col:
 
 with info_col:
     if st.session_state.voice_transcript:
-        st.info(f'🎙️ Heard: **"{st.session_state.voice_transcript}"** — press Enter or edit below.')
+        st.info(f'🎙️ Heard: **"{st.session_state.voice_transcript}"**')
 
 # ── Chat input ────────────────────────────────────────────────────────────────────
 
