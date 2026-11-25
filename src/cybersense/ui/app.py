@@ -142,6 +142,9 @@ def stream_chat(
         headers={"Accept": "text/event-stream"},
         timeout=60,
     ) as resp:
+        # Read error body before raise_for_status so .text is available
+        if resp.status_code >= 400:
+            resp.read()
         resp.raise_for_status()
         for line in resp.iter_lines():
             if line.startswith("data: "):
@@ -218,7 +221,11 @@ if query_raw and query_raw.strip():
                 placeholder.markdown(full_response + "▌")
             placeholder.markdown(full_response)
         except httpx.HTTPStatusError as e:
-            full_response = f"❌ API error ({e.response.status_code}): {e.response.text}"
+            try:
+                detail = e.response.text
+            except Exception:
+                detail = str(e)
+            full_response = f"❌ API error ({e.response.status_code}): {detail}"
             placeholder.error(full_response)
         except Exception as e:
             full_response = f"❌ Connection error: {e}"
