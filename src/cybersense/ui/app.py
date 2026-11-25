@@ -19,11 +19,10 @@ from cybersense.ui.voice_input import (
 
 # Optional translation (non-English → English before RAG query)
 try:
-    from googletrans import Translator
-    _translator: Translator | None = Translator()
+    from deep_translator import GoogleTranslator as _GoogleTranslator
     TRANSLATION_AVAILABLE = True
 except Exception:
-    _translator = None
+    _GoogleTranslator = None  # type: ignore[assignment,misc]
     TRANSLATION_AVAILABLE = False
 
 
@@ -85,7 +84,7 @@ with st.sidebar:
             )
         else:
             st.warning(
-                "Install `googletrans==4.0.0rc1` for auto-translation of non-English speech.",
+                "Install `deep-translator>=1.11.4` for auto-translation of non-English speech.",
                 icon="⚠️",
             )
 
@@ -114,11 +113,11 @@ with st.sidebar:
 
 def maybe_translate(text: str, source_lang: str) -> tuple[str, str | None]:
     """Translate text to English if needed. Returns (translated, original_or_None)."""
-    if source_lang.startswith("en") or not TRANSLATION_AVAILABLE or _translator is None:
+    if source_lang.startswith("en") or not TRANSLATION_AVAILABLE or _GoogleTranslator is None:
         return text, None
     try:
-        res = _translator.translate(text, src=source_lang.split("-")[0], dest="en")
-        translated = res.text
+        src = source_lang.split("-")[0]  # e.g. 'hi' from 'hi-IN'
+        translated = _GoogleTranslator(source=src, target="en").translate(text)
         return (translated, text) if translated and translated.lower() != text.lower() else (text, None)
     except Exception:
         return text, None
