@@ -153,10 +153,12 @@ def stream_chat(
                     break
                 try:
                     chunk = json.loads(data)
-                    if "delta" in chunk:
-                        yield chunk["delta"]
-                    if "conversation_id" in chunk:
-                        st.session_state.conversation_id = chunk["conversation_id"]
+                    # Token stream: {"token": "..."}
+                    if "token" in chunk:
+                        yield chunk["token"]
+                    # Final summary frame: {"done": true, "session_id": "...", ...}
+                    if chunk.get("done") and "session_id" in chunk:
+                        st.session_state.conversation_id = chunk["session_id"]
                 except json.JSONDecodeError:
                     yield data
 
