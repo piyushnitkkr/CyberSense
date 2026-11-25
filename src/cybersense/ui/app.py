@@ -1,50 +1,40 @@
 """
-app.py (updated) — CyberSense Streamlit Chat UI with Voice Input + Multilingual STT.
-
-Changes from previous version:
-  1. Import voice_input module
-  2. Add voice language selector in sidebar
-  3. Add microphone button below the chat input
-  4. Auto-populate chat input when voice transcript is received
-  5. Translate non-English queries to English before hitting the API
-     (uses googletrans, falls back gracefully if unavailable)
-
-INSTALL additional deps:
-    pip install googletrans==4.0.0rc1    # optional: for query translation
-    # No extra deps needed for browser STT — it's built into Chrome/Edge
+app.py — CyberSense Streamlit Chat UI with Voice Input + Multilingual STT.
 """
 
-import asyncio
+from __future__ import annotations
+
 import json
-import time
 from typing import Generator
 
 import httpx
 import streamlit as st
 
-# Voice input module (copy voice_input.py to src/cybersense/ui/)
+# Voice input — browser-based, zero server load
 from cybersense.ui.voice_input import (
     DEFAULT_LANGUAGE_CODE,
     render_voice_input,
     voice_language_selector,
 )
 
-# ── Optional translation support ────────────────────────────────────────────────
+# Optional translation (non-English → English before RAG query)
 try:
     from googletrans import Translator
-    _translator = Translator()
+    _translator: Translator | None = Translator()
     TRANSLATION_AVAILABLE = True
-except ImportError:
+except Exception:
     _translator = None
     TRANSLATION_AVAILABLE = False
 
 
 # ── Config ──────────────────────────────────────────────────────────────────────
+
 API_BASE = st.secrets.get("API_BASE_URL", "https://cybersense-api-vorj.onrender.com")
 CHAT_ENDPOINT = f"{API_BASE}/api/v1/chat"
 
 
-# ── Page Setup ──────────────────────────────────────────────────────────────────
+# ── Page config ─────────────────────────────────────────────────────────────────
+
 st.set_page_config(
     page_title="CyberSense",
     page_icon="🛡️",
@@ -52,62 +42,56 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Session State ───────────────────────────────────────────────────────────────
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "conversation_id" not in st.session_state:
-    st.session_state.conversation_id = None
-if "voice_transcript" not in st.session_state:
-    st.session_state.voice_transcript = ""
-if "voice_lang" not in st.session_state:
-    st.session_state.voice_lang = DEFAULT_LANGUAGE_CODE
+
+# ── Session state ────────────────────────────────────────────────────────────────
+
+for _k, _v in {
+    "messages": [],
+    "conversation_id": None,
+    "voice_transcript": "",
+    "voice_lang": DEFAULT_LANGUAGE_CODE,
+}.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
 
 
-# ── Sidebar ─────────────────────────────────────────────────────────────────────
+# ── Sidebar ──────────────────────────────────────────────────────────────────────
+
 with st.sidebar:
     st.markdown("## 🛡️ CyberSense")
     st.caption("AI-powered cybersecurity knowledge assistant")
     st.divider()
 
-    # --- Source filter ---
+    # Data source toggles
     st.markdown("**📚 Data Sources**")
-    source_attack  = st.checkbox("MITRE ATT&CK",  value=True)
-    source_cwe     = st.checkbox("MITRE CWE",      value=True)
-    source_owasp   = st.checkbox("OWASP Top 10",   value=True)
-    source_docs    = st.checkbox("Custom Docs",     value=True)
-
-    enabled_sources = []
-    if source_attack: enabled_sources.append("attack")
-    if source_cwe:    enabled_sources.append("cwe")
-    if source_owasp:  enabled_sources.append("owasp")
-    if source_docs:   enabled_sources.append("user_docs")
+    enabled_sources: list[str] = []
+    if st.checkbox("MITRE ATT&CK",  value=True): enabled_sources.append("attack")
+    if st.checkbox("MITRE CWE",      value=True): enabled_sources.append("cwe")
+    if st.checkbox("OWASP Top 10",   value=True): enabled_sources.append("owasp")
+    if st.checkbox("Custom Docs",    value=True): enabled_sources.append("user_docs")
 
     st.divider()
 
-    # --- Voice language selector ---
-    st.markdown("**🎙️ Voice Input Settings**")
-    selected_lang = voice_language_selector(
-        label="Speak in...",
-        key="sidebar_voice_lang",
-    )
+    # Voice language selector
+    st.markdown("**🎙️ Voice Input**")
+    selected_lang = voice_language_selector(label="Speak in", key="sidebar_voice_lang")
     st.session_state.voice_lang = selected_lang
 
-    if selected_lang != "en-US" and TRANSLATION_AVAILABLE:
-        st.info(
-            "🌐 Your voice input will be **auto-translated to English** "
-            "before querying CyberSense.",
-            icon="ℹ️",
-        )
-    elif selected_lang != "en-US" and not TRANSLATION_AVAILABLE:
-        st.warning(
-            "googletrans not installed — query will be sent as-is. "
-            "Install with: `pip install googletrans==4.0.0rc1`",
-            icon="⚠️",
-        )
+    if selected_lang != "en-US":
+        if TRANSLATION_AVAILABLE:
+            st.info(
+                "🌐 Non-English voice input will be **auto-translated to English** before querying.",
+                icon="ℹ️",
+            )
+        else:
+            st.warning(
+                "Install `googletrans==4.0.0rc1` for auto-translation of non-English speech.",
+                icon="⚠️",
+            )
 
     st.divider()
 
-    # --- Conversation controls ---
+    # Controls
     st.markdown("**⚙️ Controls**")
     if st.button("🗑️ Clear conversation", use_container_width=True):
         st.session_state.messages = []
@@ -115,52 +99,47 @@ with st.sidebar:
         st.session_state.voice_transcript = ""
         st.rerun()
 
-    # --- API health ---
+    # Health check
     st.divider()
     st.markdown("**🔌 API Status**")
     if st.button("Check health", use_container_width=True):
         try:
             r = httpx.get(f"{API_BASE}/health", timeout=5)
-            if r.status_code == 200:
-                st.success("API: Online ✅")
-            else:
-                st.error(f"API: HTTP {r.status_code}")
+            st.success("API: Online ✅") if r.status_code == 200 else st.error(f"API: HTTP {r.status_code}")
         except Exception as e:
             st.error(f"API: Unreachable — {e}")
 
 
-# ── Helper: translate query to English ─────────────────────────────────────────
+# ── Helpers ──────────────────────────────────────────────────────────────────────
 
 def maybe_translate(text: str, source_lang: str) -> tuple[str, str | None]:
-    """
-    If source_lang is not English and googletrans is available,
-    translate text to English.
-
-    Returns (translated_text, original_text_or_None).
-    """
-    if source_lang.startswith("en") or not TRANSLATION_AVAILABLE or not _translator:
+    """Translate text to English if needed. Returns (translated, original_or_None)."""
+    if source_lang.startswith("en") or not TRANSLATION_AVAILABLE or _translator is None:
         return text, None
     try:
-        result = _translator.translate(text, src=source_lang.split("-")[0], dest="en")
-        translated = result.text
-        if translated and translated.lower() != text.lower():
-            return translated, text
-        return text, None
+        res = _translator.translate(text, src=source_lang.split("-")[0], dest="en")
+        translated = res.text
+        return (translated, text) if translated and translated.lower() != text.lower() else (text, None)
     except Exception:
         return text, None
 
 
-# ── Helper: stream chat response ────────────────────────────────────────────────
-
-def stream_chat(query: str, conv_id: str | None, sources: list[str]) -> Generator[str, None, None]:
+def stream_chat(
+    query: str,
+    conv_id: str | None,
+    sources: list[str],
+) -> Generator[str, None, None]:
+    """Stream a chat response from the CyberSense API via SSE."""
     payload = {
         "query": query,
         "conversation_id": conv_id,
-        "source_filter": sources if sources else None,
+        "source_filter": sources or None,
         "stream": True,
     }
     with httpx.stream(
-        "POST", CHAT_ENDPOINT, json=payload,
+        "POST",
+        CHAT_ENDPOINT,
+        json=payload,
         headers={"Accept": "text/event-stream"},
         timeout=60,
     ) as resp:
@@ -174,13 +153,13 @@ def stream_chat(query: str, conv_id: str | None, sources: list[str]) -> Generato
                     chunk = json.loads(data)
                     if "delta" in chunk:
                         yield chunk["delta"]
-                    elif "conversation_id" in chunk:
+                    if "conversation_id" in chunk:
                         st.session_state.conversation_id = chunk["conversation_id"]
                 except json.JSONDecodeError:
                     yield data
 
 
-# ── Main Chat UI ────────────────────────────────────────────────────────────────
+# ── Main UI ──────────────────────────────────────────────────────────────────────
 
 st.markdown("## 🛡️ CyberSense — Cybersecurity AI Assistant")
 st.caption(
@@ -188,14 +167,14 @@ st.caption(
     "or upload your own security documents."
 )
 
-# --- Render chat history ---
+# Chat history
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# ── Voice Input Section ─────────────────────────────────────────────────────────
+# ── Voice input row ───────────────────────────────────────────────────────────────
 
-voice_col, text_col = st.columns([1, 5], gap="small")
+voice_col, info_col = st.columns([1, 5], gap="small")
 
 with voice_col:
     st.markdown("**🎙️ Voice**")
@@ -203,63 +182,49 @@ with voice_col:
         lang=st.session_state.voice_lang,
         key="main_voice_btn",
     )
-    # If browser returned a transcript via postMessage → prefill the state
     if voice_result:
         st.session_state.voice_transcript = voice_result
 
-with text_col:
-    # Show voice transcript preview if captured
+with info_col:
     if st.session_state.voice_transcript:
-        st.info(f"🎙️ Heard: **{st.session_state.voice_transcript}**  — press Send or edit below.")
+        st.info(f'🎙️ Heard: **"{st.session_state.voice_transcript}"** — press Enter or edit below.')
 
-# --- Chat input (pre-populated with voice transcript if any) ---
-prefill = st.session_state.voice_transcript or ""
-user_input = st.chat_input(
-    placeholder="Ask a cybersecurity question (or use voice above)…",
-    key="chat_input_box",
-)
+# ── Chat input ────────────────────────────────────────────────────────────────────
 
-# If user typed something, that takes priority over voice transcript
-query = user_input or (st.session_state.voice_transcript if not user_input else "")
+user_input = st.chat_input("Ask a cybersecurity question (or use voice above)…")
 
-if query and query.strip():
-    # Clear voice transcript after use
-    st.session_state.voice_transcript = ""
+# Prefer typed input; fall back to voice transcript
+query_raw = user_input or st.session_state.voice_transcript
 
-    # --- Translate if needed ---
-    translated_query, original_query = maybe_translate(
-        query.strip(), st.session_state.voice_lang
+if query_raw and query_raw.strip():
+    st.session_state.voice_transcript = ""  # clear after use
+
+    translated, original = maybe_translate(query_raw.strip(), st.session_state.voice_lang)
+
+    display_text = (
+        f"{original}\n\n*(Auto-translated: {translated})*" if original else query_raw.strip()
     )
 
-    # Build display text (show original in a note if translated)
-    display_query = query.strip()
-    if original_query:
-        display_query = f"{original_query}\n\n*(Translated: {translated_query})*"
-
-    # Append user message
-    st.session_state.messages.append({"role": "user", "content": display_query})
+    # Append + display user message
+    st.session_state.messages.append({"role": "user", "content": display_text})
     with st.chat_message("user"):
-        st.markdown(display_query)
+        st.markdown(display_text)
 
-    # --- Stream assistant response ---
+    # Stream assistant response
     with st.chat_message("assistant"):
-        response_placeholder = st.empty()
+        placeholder = st.empty()
         full_response = ""
         try:
-            for chunk in stream_chat(
-                translated_query,
-                st.session_state.conversation_id,
-                enabled_sources,
-            ):
+            for chunk in stream_chat(translated, st.session_state.conversation_id, enabled_sources):
                 full_response += chunk
-                response_placeholder.markdown(full_response + "▌")
-            response_placeholder.markdown(full_response)
+                placeholder.markdown(full_response + "▌")
+            placeholder.markdown(full_response)
         except httpx.HTTPStatusError as e:
             full_response = f"❌ API error ({e.response.status_code}): {e.response.text}"
-            response_placeholder.error(full_response)
+            placeholder.error(full_response)
         except Exception as e:
-            full_response = f"❌ Connection error: {str(e)}"
-            response_placeholder.error(full_response)
+            full_response = f"❌ Connection error: {e}"
+            placeholder.error(full_response)
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
     st.rerun()
