@@ -130,8 +130,8 @@ def stream_chat(
 ) -> Generator[str, None, None]:
     """Stream a chat response from the CyberSense API via SSE."""
     payload = {
-        "query": query,
-        "conversation_id": conv_id,
+        "message": query,
+        "session_id": conv_id,
         "source_filter": sources or None,
         "stream": True,
     }
